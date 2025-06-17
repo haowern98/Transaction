@@ -7,5 +7,6 @@ transaction data to records in fee files.
 
 from .base_matcher import BaseMatcher
 from .parent_matcher import ParentMatcher
+from .child_matcher import ChildMatcher
 
-__all__ = ['BaseMatcher', 'ParentMatcher']
+__all__ = ['BaseMatcher', 'ParentMatcher', 'ChildMatcher']

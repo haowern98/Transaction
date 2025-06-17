@@ -1,10 +1,10 @@
 import pandas as pd
 import numpy as np
 import openpyxl
-from matchers import ParentMatcher
+from matchers import ParentMatcher, ChildMatcher
 
 def process_fee_matching():
-    fee_record_file = r"C:\Users\user\Downloads\2025 Tuition Fee.xlsx"
+    fee_record_file = r"C:\Users\user\Downloads\Parent-Student Matching Pair.xlsx"
     transaction_file = r"C:\Users\user\Downloads\Fee Statements\3985094904Statement (9).csv"
     
     print(f"Transaction File:   {transaction_file}")
@@ -40,14 +40,21 @@ def process_fee_matching():
             print(f"Error reading file: {e}")
             return False
         
+        # Get parent names from first column and child names from second column
         parent_names = fee_df.iloc[:, 0].dropna().tolist()
-        print(f"Found {len(parent_names)} parent names in fee record")
+        child_names = fee_df.iloc[:, 1].dropna().tolist() if len(fee_df.columns) > 1 else []
         
-        # Initialize the parent matcher
+        print(f"Found {len(parent_names)} parent names in fee record")
+        print(f"Found {len(child_names)} child names in fee record")
+        
+        # Initialize both matchers
         parent_matcher = ParentMatcher(threshold=70)
+        child_matcher = ChildMatcher(threshold=70)
         
         matched_count = 0
         unmatched_count = 0
+        parent_matched_count = 0
+        child_matched_count = 0
         all_results = []
         
         for idx, row in trans_df.iterrows():
@@ -84,6 +91,7 @@ def process_fee_matching():
                     'index': idx,
                     'parent_from_transaction': "",
                     'matched_parent': "",           
+                    'matched_child': "",
                     'amount': "",                   
                     'matched': False
                 })
@@ -91,53 +99,66 @@ def process_fee_matching():
             
             display_parent = transaction_ref
             
-            # Use the parent matcher class
-            best_match, best_score = parent_matcher.match(reference_columns, parent_names)
+            # First, match parent names
+            best_parent_match, parent_score = parent_matcher.match(reference_columns, parent_names)
             
-            if best_match:
+            # Then, match child names using leftover text after parent removal
+            best_child_match, child_score = child_matcher.match(reference_columns, child_names, best_parent_match)
+            
+            # Count matches separately
+            if best_parent_match:
+                parent_matched_count += 1
+            if best_child_match:
+                child_matched_count += 1
+            
+            # Determine if we consider this a successful match
+            has_match = best_parent_match or best_child_match
+            
+            if has_match:
                 matched_count += 1
-                all_results.append({
-                    'index': idx,
-                    'parent_from_transaction': display_parent,
-                    'matched_parent': best_match.strip(),
-                    'amount': amount,
-                    'matched': True
-                })
             else:
                 unmatched_count += 1
-                all_results.append({
-                    'index': idx,
-                    'parent_from_transaction': display_parent,
-                    'matched_parent': "NO MATCH FOUND",
-                    'amount': amount,
-                    'matched': False
-                })
+            
+            all_results.append({
+                'index': idx,
+                'parent_from_transaction': display_parent,
+                'matched_parent': best_parent_match.strip() if best_parent_match else "NO MATCH FOUND",
+                'matched_child': best_child_match.strip() if best_child_match else "NO CHILD MATCH FOUND",
+                'amount': amount,
+                'matched': has_match
+            })
         
         total_processed = matched_count + unmatched_count
         match_rate = (matched_count / total_processed * 100) if total_processed > 0 else 0
+        parent_match_rate = (parent_matched_count / total_processed * 100) if total_processed > 0 else 0
+        child_match_rate = (child_matched_count / total_processed * 100) if total_processed > 0 else 0
         
         print(f"\n=== MATCHING SUMMARY ===")
         print(f"Total transactions processed: {total_processed}")
-        print(f"Successfully matched: {matched_count}")
+        print(f"Successfully matched (either parent or child): {matched_count}")
         print(f"Unmatched transactions: {unmatched_count}")
-        print(f"Match rate: {match_rate:.1f}%")
+        print(f"Overall match rate: {match_rate:.1f}%")
+        print(f"")
+        print(f"Parent matches: {parent_matched_count} ({parent_match_rate:.1f}%)")
+        print(f"Child matches: {child_matched_count} ({child_match_rate:.1f}%)")
         
-        separator_line = "=" * 130
+        separator_line = "=" * 160
         print(f"\n{separator_line}")
-        print(f"{'Index':<6} | {'Parent Name (Transaction File)':<60} | {'Matched Name (Fee Record)':<40} | {'Amount':<10}")
+        print(f"{'Index':<6} | {'Parent Name (Transaction File)':<50} | {'Matched Parent (Fee Record)':<30} | {'Matched Child (Fee Record)':<30} | {'Amount':<10}")
         print(separator_line)
         
         for result in all_results:
             index = result['index']
-            parent_name = str(result['parent_from_transaction'])[:59] if result['parent_from_transaction'] else ""
-            matched_name = str(result['matched_parent'])[:39] if result['matched_parent'] else ""
+            parent_name = str(result['parent_from_transaction'])[:49] if result['parent_from_transaction'] else ""
+            matched_parent = str(result['matched_parent'])[:29] if result['matched_parent'] else ""
+            matched_child = str(result['matched_child'])[:29] if result['matched_child'] else ""
             amount = result['amount']
             
             if amount == "":
-                empty_line = f"{index:<6} | {'':<60} | {'':<40} | {'':<10}"
+                empty_line = f"{index:<6} | {'':<50} | {'':<30} | {'':<30} | {'':<10}"
                 print(empty_line)
             else:
-                data_line = f"{index:<6} | {parent_name:<60} | {matched_name:<40} | {amount:<10.2f}"
+                data_line = f"{index:<6} | {parent_name:<50} | {matched_parent:<30} | {matched_child:<30} | {amount:<10.2f}"
                 print(data_line)
         
         print(separator_line)
