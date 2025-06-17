@@ -26,15 +26,26 @@ def process_fee_matching():
             
             print(f"Transaction file loaded: {len(all_rows)} rows")
             
-            max_cols = max(len(row) for row in all_rows) if all_rows else 0
+            # Remove completely empty rows
+            filtered_rows = []
+            for row in all_rows:
+                if any(str(cell).strip() for cell in row):  # Keep row if any cell has content
+                    filtered_rows.append(row)
+            
+            print(f"After filtering empty rows: {len(filtered_rows)} rows")
+            
+            max_cols = max(len(row) for row in filtered_rows) if filtered_rows else 0
             
             padded_rows = []
-            for row in all_rows:
+            for row in filtered_rows:
                 padded_row = row + [''] * (max_cols - len(row))
                 padded_rows.append(padded_row)
             
             columns = [f'Col_{i}' for i in range(max_cols)]
             trans_df = pd.DataFrame(padded_rows, columns=columns)
+            
+            # Reset index to ensure clean sequential indexing
+            trans_df.reset_index(drop=True, inplace=True)
             
         except Exception as e:
             print(f"Error reading file: {e}")
@@ -103,7 +114,8 @@ def process_fee_matching():
             best_parent_match, parent_score = parent_matcher.match(reference_columns, parent_names)
             
             # Then, match child names using leftover text after parent removal
-            best_child_match, child_score = child_matcher.match(reference_columns, child_names, best_parent_match)
+            # Only search among children that belong to the matched parent
+            best_child_match, child_score = child_matcher.match(reference_columns, fee_df, best_parent_match)
             
             # Count matches separately
             if best_parent_match:
@@ -142,23 +154,23 @@ def process_fee_matching():
         print(f"Parent matches: {parent_matched_count} ({parent_match_rate:.1f}%)")
         print(f"Child matches: {child_matched_count} ({child_match_rate:.1f}%)")
         
-        separator_line = "=" * 160
+        separator_line = "=" * 180
         print(f"\n{separator_line}")
-        print(f"{'Index':<6} | {'Parent Name (Transaction File)':<50} | {'Matched Parent (Fee Record)':<30} | {'Matched Child (Fee Record)':<30} | {'Amount':<10}")
+        print(f"{'Index':<6} | {'Parent Name (Transaction File)':<80} | {'Matched Parent (Fee Record)':<30} | {'Matched Child (Fee Record)':<30} | {'Amount':<10}")
         print(separator_line)
         
         for result in all_results:
             index = result['index']
-            parent_name = str(result['parent_from_transaction'])[:49] if result['parent_from_transaction'] else ""
+            parent_name = str(result['parent_from_transaction'])[:79] if result['parent_from_transaction'] else ""
             matched_parent = str(result['matched_parent'])[:29] if result['matched_parent'] else ""
             matched_child = str(result['matched_child'])[:29] if result['matched_child'] else ""
             amount = result['amount']
             
             if amount == "":
-                empty_line = f"{index:<6} | {'':<50} | {'':<30} | {'':<30} | {'':<10}"
+                empty_line = f"{index:<6} | {'':<80} | {'':<30} | {'':<30} | {'':<10}"
                 print(empty_line)
             else:
-                data_line = f"{index:<6} | {parent_name:<50} | {matched_parent:<30} | {matched_child:<30} | {amount:<10.2f}"
+                data_line = f"{index:<6} | {parent_name:<80} | {matched_parent:<30} | {matched_child:<30} | {amount:<10.2f}"
                 print(data_line)
         
         print(separator_line)

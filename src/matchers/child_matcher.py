@@ -76,9 +76,9 @@ class ChildMatcher(BaseMatcher):
             for i in range(1, len(big_space_parts)):
                 child_part = big_space_parts[i].strip()
                 if child_part:
-                    cleaned = self.clean_name(child_part)
-                    if len(cleaned) > 2:
-                        potential_names.append(cleaned)
+                    # Further split this part for multiple children
+                    child_names = self._extract_multiple_children(child_part)
+                    potential_names.extend(child_names)
         
         # Method 2: Split by commas and common separators
         parts = text.split(',')
@@ -87,9 +87,8 @@ class ChildMatcher(BaseMatcher):
             if part:
                 sub_parts = re.split(r'[/\\|]', part)
                 for sub_part in sub_parts:
-                    cleaned = self.clean_name(sub_part)
-                    if len(cleaned) > 2:
-                        potential_names.append(cleaned)
+                    child_names = self._extract_multiple_children(sub_part)
+                    potential_names.extend(child_names)
         
         # Method 3: Look for capitalized words after common patterns
         child_patterns = [
@@ -101,10 +100,9 @@ class ChildMatcher(BaseMatcher):
         for pattern in child_patterns:
             matches = re.finditer(pattern, text)
             for match in matches:
-                child_name = match.group(1).strip()
-                cleaned = self.clean_name(child_name)
-                if len(cleaned) > 2:
-                    potential_names.append(cleaned)
+                child_text = match.group(1).strip()
+                child_names = self._extract_multiple_children(child_text)
+                potential_names.extend(child_names)
         
         # Method 4: Extract words that look like names (mixed case or all caps short words)
         words = text.split()
@@ -120,11 +118,125 @@ class ChildMatcher(BaseMatcher):
                         break
                 
                 potential_name = ' '.join(name_parts)
-                cleaned = self.clean_name(potential_name)
-                if len(cleaned) > 2:
-                    potential_names.append(cleaned)
+                child_names = self._extract_multiple_children(potential_name)
+                potential_names.extend(child_names)
         
         return self._remove_duplicates(potential_names)
+    
+    def _extract_multiple_children(self, text):
+        """
+        Extract multiple child names from a single text segment.
+        Handles cases like "Isabelle Isalynn Lai", "daniel rayyan n raihan", etc.
+        
+        Args:
+            text (str): Text that may contain multiple child names
+            
+        Returns:
+            list: List of individual child names
+        """
+        if not text or len(text.strip()) < 2:
+            return []
+        
+        child_names = []
+        
+        # Split by common separators for multiple children
+        separators = [' N ', ' AND ', ' & ', ' + ', ',', '/', '\\', '|']
+        
+        # Try each separator first
+        for separator in separators:
+            if separator.upper() in text.upper():
+                parts = re.split(re.escape(separator), text, flags=re.IGNORECASE)
+                for part in parts:
+                    cleaned = self.clean_name(part.strip())
+                    if len(cleaned) > 2:
+                        child_names.append(cleaned)
+                return child_names
+        
+        # If no separators found, try to identify multiple names in sequence
+        # Remove common patterns that aren't part of names first
+        cleaned_text = text
+        
+        # Remove common patterns that aren't part of names
+        patterns_to_remove = [
+            r'\b(JUNE?|JULY?|JUN|JUL)\s*\d{0,4}\b',  # June25, Jun2025, etc.
+            r'\bF\d+\b',  # F4, F5, etc.
+            r'\b(FORM|GRADE)\s*\d+\b',  # Form1, Grade2, etc.
+            r'\b(TUITION|FEE|FEES|PAYMENT)\b',
+            r'\b20\d{2}\b',  # Years like 2025
+            r'\b\d{1,2}/\d{1,2}\b',  # Dates like 06/25
+        ]
+        
+        for pattern in patterns_to_remove:
+            cleaned_text = re.sub(pattern, '', cleaned_text, flags=re.IGNORECASE)
+        
+        # Clean up extra spaces
+        cleaned_text = re.sub(r'\s+', ' ', cleaned_text).strip()
+        
+        # Try to split into individual names
+        # Look for patterns like "FirstName SecondName ThirdName" and split intelligently
+        words = cleaned_text.split()
+        
+        if len(words) <= 2:
+            # Simple case: 1-2 words, treat as single name
+            cleaned = self.clean_name(cleaned_text)
+            if len(cleaned) > 2:
+                child_names.append(cleaned)
+        elif len(words) == 3:
+            # 3 words: Could be "First Middle Last" or "FirstName SecondName"
+            # Try both interpretations
+            full_name = self.clean_name(cleaned_text)
+            if len(full_name) > 2:
+                child_names.append(full_name)
+            
+            # Also try first word as separate name and last two as another name
+            first_name = self.clean_name(words[0])
+            last_two = self.clean_name(' '.join(words[1:]))
+            
+            if len(first_name) > 2 and first_name != full_name:
+                child_names.append(first_name)
+            if len(last_two) > 2 and last_two != full_name:
+                child_names.append(last_two)
+                
+        elif len(words) >= 4:
+            # 4+ words: Likely multiple names
+            # Try different combinations
+            
+            # Combination 1: First word + rest of words
+            first_name = self.clean_name(words[0])
+            rest_name = self.clean_name(' '.join(words[1:]))
+            
+            if len(first_name) > 2:
+                child_names.append(first_name)
+            if len(rest_name) > 2:
+                child_names.append(rest_name)
+            
+            # Combination 2: First two words + rest
+            if len(words) >= 4:
+                first_two = self.clean_name(' '.join(words[:2]))
+                rest_two = self.clean_name(' '.join(words[2:]))
+                
+                if len(first_two) > 2 and first_two not in child_names:
+                    child_names.append(first_two)
+                if len(rest_two) > 2 and rest_two not in child_names:
+                    child_names.append(rest_two)
+            
+            # Combination 3: Split in middle
+            mid_point = len(words) // 2
+            first_half = self.clean_name(' '.join(words[:mid_point]))
+            second_half = self.clean_name(' '.join(words[mid_point:]))
+            
+            if len(first_half) > 2 and first_half not in child_names:
+                child_names.append(first_half)
+            if len(second_half) > 2 and second_half not in child_names:
+                child_names.append(second_half)
+        
+        # Remove duplicates while preserving order
+        unique_names = []
+        for name in child_names:
+            if name not in unique_names:
+                unique_names.append(name)
+        
+        return unique_names
     
     def find_best_match(self, target_name, child_list):
         """
@@ -225,49 +337,80 @@ class ChildMatcher(BaseMatcher):
         for ref_col in reference_columns:
             # Clean Excel formatting first
             leftover_text = self._clean_excel_formatting(ref_col)
+            original_text = leftover_text  # Keep original for debugging
             
             if matched_parent_name:
                 # Clean the matched parent name
                 cleaned_parent = self.clean_name(matched_parent_name)
                 
-                # Try to find the parent name portion in the original text
-                # Split by large spaces first (common pattern)
+                # Method 1: Split by large spaces first (most reliable)
                 big_space_parts = re.split(r'\s{5,}', leftover_text)
                 if len(big_space_parts) > 1:
-                    # First part is likely parent, remove it
+                    # First part is likely parent, keep the rest
                     leftover_text = ' '.join(big_space_parts[1:])
                 else:
-                    # Try to remove parent words from the text
+                    # Method 2: Try to find the parent name in the text and remove it
                     parent_words = cleaned_parent.split()
-                    for word in parent_words:
-                        if len(word) > 2:
-                            leftover_text = re.sub(rf'\b{re.escape(word)}\b', '', leftover_text, flags=re.IGNORECASE)
+                    temp_text = leftover_text.upper()
+                    
+                    # Try to find the complete parent name sequence
+                    parent_pattern = r'\b' + r'\s+'.join([re.escape(word) for word in parent_words]) + r'\b'
+                    leftover_text = re.sub(parent_pattern, '', temp_text, flags=re.IGNORECASE).strip()
+                    
+                    # If that didn't work, try removing individual words
+                    if leftover_text.upper() == temp_text:
+                        for word in parent_words:
+                            if len(word) > 2:  # Only remove meaningful words
+                                word_pattern = r'\b' + re.escape(word) + r'\b'
+                                leftover_text = re.sub(word_pattern, '', leftover_text, flags=re.IGNORECASE)
             
             # Clean up the leftover text
             leftover_text = re.sub(r'\s+', ' ', leftover_text).strip()
+            
+            # Only add if there's meaningful leftover content
             if leftover_text and len(leftover_text) > 2:
-                leftover_columns.append(leftover_text)
+                # Remove common non-name words
+                non_name_words = ['JUNE', 'JULY', 'TUITION', 'FEE', 'FEES', 'PAYMENT', 'TRANSFER', '2025', '2024']
+                words = leftover_text.split()
+                filtered_words = []
+                
+                for word in words:
+                    # Keep word if it's not a common non-name word or if it contains letters and is substantial
+                    if (word.upper() not in non_name_words and 
+                        any(c.isalpha() for c in word) and 
+                        len(word) > 1):
+                        filtered_words.append(word)
+                
+                if filtered_words:
+                    leftover_text = ' '.join(filtered_words)
+                    leftover_columns.append(leftover_text)
         
         return leftover_columns
     
-    def match(self, reference_columns, child_names, matched_parent_name=None):
+    def match(self, reference_columns, fee_df, matched_parent_name=None):
         """
         Match child names from transaction references to fee record child names.
+        Only searches for children that belong to the matched parent.
         
         Args:
             reference_columns (list): List of reference strings from transaction
-            child_names (list): List of child names from fee record (second column)
-            matched_parent_name (str): The matched parent name to remove from text
+            fee_df (DataFrame): The complete fee record DataFrame
+            matched_parent_name (str): The matched parent name to constrain search
         
         Returns:
-            tuple: (best_match, best_score) or (None, 0) if no match found
+            tuple: (comma_separated_matches, total_score) or (None, 0) if no matches found
         """
-        # Remove parent name portions if provided
-        if matched_parent_name:
-            leftover_columns = self.remove_parent_portions(reference_columns, matched_parent_name)
-        else:
-            # Clean Excel formatting from all columns
-            leftover_columns = [self._clean_excel_formatting(col) for col in reference_columns]
+        if not matched_parent_name:
+            return None, 0
+        
+        # Get children that belong to the matched parent
+        parent_children = self._get_children_for_parent(fee_df, matched_parent_name)
+        
+        if not parent_children:
+            return None, 0
+        
+        # Remove parent name portions from reference text
+        leftover_columns = self.remove_parent_portions(reference_columns, matched_parent_name)
         
         # Extract all potential child names from leftover text
         all_potential_names = []
@@ -278,14 +421,50 @@ class ChildMatcher(BaseMatcher):
         # Remove duplicates
         unique_names = self._remove_duplicates(all_potential_names)
         
-        # Find best match across all potential names
-        best_match = None
-        best_score = 0
+        # Find all matches across all potential names, but only against this parent's children
+        all_matches = []
+        total_score = 0
         
         for potential_name in unique_names:
-            match, score = self.find_best_match(potential_name, child_names)
-            if match and score > best_score:
-                best_match = match
-                best_score = score
+            match, score = self.find_best_match(potential_name, parent_children)
+            if match and score >= self.threshold:
+                # Avoid duplicate matches
+                if match not in all_matches:
+                    all_matches.append(match)
+                    total_score += score
         
-        return best_match, best_score
+        if all_matches:
+            # Return comma-separated list of matches
+            combined_matches = ", ".join(all_matches)
+            average_score = total_score / len(all_matches)
+            return combined_matches, average_score
+        
+        return None, 0
+    
+    def _get_children_for_parent(self, fee_df, matched_parent_name):
+        """
+        Get all children names that belong to the specified parent from fee record.
+        
+        Args:
+            fee_df (DataFrame): The complete fee record DataFrame
+            matched_parent_name (str): The parent name to find children for
+            
+        Returns:
+            list: List of child names belonging to this parent
+        """
+        children = []
+        
+        # Get parent and child columns
+        parent_column = fee_df.iloc[:, 0] if len(fee_df.columns) > 0 else []
+        child_column = fee_df.iloc[:, 1] if len(fee_df.columns) > 1 else []
+        
+        # Find all rows where the parent matches
+        for idx, parent in enumerate(parent_column):
+            if pd.notna(parent) and str(parent).strip() == matched_parent_name.strip():
+                # Get the corresponding child name
+                if idx < len(child_column) and pd.notna(child_column.iloc[idx]):
+                    child_name = str(child_column.iloc[idx]).strip()
+                    if child_name and child_name not in children:
+                        children.append(child_name)
+        
+        return children
