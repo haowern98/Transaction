@@ -1,6 +1,7 @@
 """
 Main window for the Transaction Matcher GUI application
-Save this as: src/gui/transaction_main_window.py
+Updated with Excel-like editing capabilities
+Save this as: src/gui_launcher.py
 """
 import sys
 import os
@@ -17,6 +18,10 @@ parent_dir = os.path.dirname(current_dir)
 sys.path.insert(0, parent_dir)
 
 import pandas as pd
+
+# Import the new editable table integration
+from gui.table_integration import IntegratedEditableTable
+print("✅ Successfully imported IntegratedEditableTable")
 
 
 class ProcessingThread(QThread):
@@ -48,12 +53,16 @@ class TransactionMatcherWindow(QMainWindow):
         self.fee_file_path = r"C:\Users\user\Downloads\Parent-Student Matching Pair.xlsx"
         self.transaction_file_path = r"C:\Users\user\Downloads\Fee Statements\3985094904Statement (9).csv"
         self.results_data = []
+        
+        # Initialize the editable table
+        self.editable_table = IntegratedEditableTable(self)
+        
         self.init_ui()
     
     def init_ui(self):
         """Initialize the user interface"""
         self.setWindowTitle("Fee Transaction Matcher")
-        self.setGeometry(100, 100, 1000, 700)
+        self.setGeometry(100, 100, 1200, 800)  # Made wider to accommodate editing toolbar
         
         # Create central widget and main layout
         central_widget = QWidget()
@@ -64,49 +73,15 @@ class TransactionMatcherWindow(QMainWindow):
         central_widget_layout = QVBoxLayout(central_widget)
         central_widget_layout.addWidget(self.tab_widget)
         
-        # Create tabs
-        self.create_file_processing_tab()
-        self.create_settings_tab()
-        
-        # Create status bar
+        # Create status bar FIRST (before creating tabs)
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
         self.status_bar.showMessage("Ready")
         
-        # Note: Menu bar removed for cleaner interface
-    
-    def create_menu_bar(self):
-        """Create the menu bar"""
-        menubar = self.menuBar()
+        # Create tabs
+        self.create_file_processing_tab()
+        self.create_settings_tab()
         
-        # Set menu bar styling to align with window title
-        menubar.setStyleSheet("""
-            QMenuBar {
-                padding-left: 8px;
-                spacing: 8px;
-            }
-            QMenuBar::item {
-                padding: 4px 8px;
-                margin: 0px;
-            }
-        """)
-        
-        # File menu
-        file_menu = menubar.addMenu('File')
-        file_menu.addAction('New Session', self.new_session)
-        file_menu.addAction('Export Results', self.export_results)
-        file_menu.addSeparator()
-        file_menu.addAction('Exit', self.close)
-        
-        # Tools menu
-        tools_menu = menubar.addMenu('Tools')
-        tools_menu.addAction('Clear Results', self.clear_results)
-        tools_menu.addAction('Validate Files', self.validate_files)
-        
-        # Help menu
-        help_menu = menubar.addMenu('Help')
-        help_menu.addAction('About', self.show_about)
-    
     def create_file_processing_tab(self):
         """Create the file processing tab"""
         tab = QWidget()
@@ -174,10 +149,13 @@ class TransactionMatcherWindow(QMainWindow):
         self.summary_label.setFont(QFont("Arial", 9))
         results_layout.addWidget(self.summary_label)
         
-        # Results table
-        self.results_table = QTableWidget()
-        self.setup_results_table()
+        # Results table (now using editable table)
+        self.results_table = self.editable_table.table
+        self.editable_table.setup_results_table()
         results_layout.addWidget(self.results_table)
+        
+        # Add editing toolbar
+        self.editable_table.add_toolbar_buttons(results_layout)
         
         # Export buttons row
         export_layout = QHBoxLayout()
@@ -220,83 +198,66 @@ class TransactionMatcherWindow(QMainWindow):
         placeholder.setFont(QFont("Arial", 12))
         layout.addWidget(placeholder)
     
-    def setup_results_table(self):
-        """Setup the results table structure"""
-        self.results_table.setColumnCount(4)
-        headers = ["Transaction Reference", "Matched Parent", "Matched Child", "Amount"]
-        self.results_table.setHorizontalHeaderLabels(headers)
-        
-        # Make all columns manually resizable AND fill full width
-        header = self.results_table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.Interactive)  # Transaction Reference - resizable
-        header.setSectionResizeMode(1, QHeaderView.Interactive)  # Matched Parent - resizable
-        header.setSectionResizeMode(2, QHeaderView.Interactive)  # Matched Child - resizable
-        header.setSectionResizeMode(3, QHeaderView.Interactive)  # Amount - resizable
-        
-        # Make the last column stretch to fill remaining space
-        header.setStretchLastSection(True)
-        
-        # Set initial widths - Transaction Reference gets most space, Amount gets least
-        self.results_table.setColumnWidth(0, 1500)  # Transaction Reference - widest
-        self.results_table.setColumnWidth(1, 250)  # Matched Parent - medium  
-        self.results_table.setColumnWidth(2, 250)  # Matched Child - medium
-        # Amount will stretch to fill remaining space but can still be manually adjusted
-        
-        # Enable text wrapping for long content
-        self.results_table.setWordWrap(True)
-        
-        # Set default row height to accommodate wrapped text
-        self.results_table.verticalHeader().setDefaultSectionSize(50)
-        
-        # Enable sorting
-        self.results_table.setSortingEnabled(True)
-        
-        # Set alternating row colors
-        self.results_table.setAlternatingRowColors(True)
-    
     def on_fee_file_changed(self, text):
-        """Handle changes to fee file text field"""
+        """Handle fee file path changes"""
         self.fee_file_path = text.strip()
         self.check_files_ready()
     
     def on_transaction_file_changed(self, text):
-        """Handle changes to transaction file text field"""
+        """Handle transaction file path changes"""
         self.transaction_file_path = text.strip()
         self.check_files_ready()
     
     def browse_fee_file(self):
         """Browse for fee record file"""
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "Select Fee Record File", "", 
+            self, 
+            "Select Fee Record File", 
+            "", 
             "Excel Files (*.xlsx *.xls);;All Files (*)"
         )
         if file_path:
-            self.fee_file_path = file_path
             self.fee_file_input.setText(file_path)
-            self.check_files_ready()
     
     def browse_transaction_file(self):
         """Browse for transaction file"""
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "Select Transaction File", "", 
+            self, 
+            "Select Transaction File", 
+            "", 
             "CSV Files (*.csv);;All Files (*)"
         )
         if file_path:
-            self.transaction_file_path = file_path
             self.transaction_file_input.setText(file_path)
-            self.check_files_ready()
     
     def check_files_ready(self):
-        """Check if both files are selected and enable process button"""
-        if self.fee_file_path and self.transaction_file_path:
-            self.process_btn.setEnabled(True)
+        """Check if both files exist and enable/disable process button"""
+        fee_ready = os.path.exists(self.fee_file_path) if self.fee_file_path else False
+        trans_ready = os.path.exists(self.transaction_file_path) if self.transaction_file_path else False
+        
+        self.process_btn.setEnabled(fee_ready and trans_ready)
+        
+        if fee_ready and trans_ready:
+            self.status_bar.showMessage("Files ready - click 'Process Files' to begin")
+        elif not fee_ready and not trans_ready:
+            self.status_bar.showMessage("Please select both fee record and transaction files")
+        elif not fee_ready:
+            self.status_bar.showMessage("Please select a valid fee record file")
         else:
-            self.process_btn.setEnabled(False)
+            self.status_bar.showMessage("Please select a valid transaction file")
     
     def process_files(self):
         """Process the selected files"""
         if not self.fee_file_path or not self.transaction_file_path:
-            QMessageBox.warning(self, "Warning", "Please select both fee record and transaction files.")
+            QMessageBox.warning(self, "Warning", "Please select both files before processing.")
+            return
+        
+        if not os.path.exists(self.fee_file_path):
+            QMessageBox.warning(self, "Warning", f"Fee file not found: {self.fee_file_path}")
+            return
+            
+        if not os.path.exists(self.transaction_file_path):
+            QMessageBox.warning(self, "Warning", f"Transaction file not found: {self.transaction_file_path}")
             return
         
         # Disable process button during processing
@@ -331,36 +292,7 @@ class TransactionMatcherWindow(QMainWindow):
     
     def populate_results_table(self):
         """Populate the results table with data"""
-        self.results_table.setRowCount(len(self.results_data))
-        
-        for row, result in enumerate(self.results_data):
-            # Transaction Reference - no truncation, full text
-            trans_ref = result.get('parent_from_transaction', '')
-            trans_ref_item = QTableWidgetItem(str(trans_ref))
-            # Enable text wrapping for this cell
-            trans_ref_item.setFlags(trans_ref_item.flags() | Qt.TextWordWrap)
-            self.results_table.setItem(row, 0, trans_ref_item)
-            
-            # Matched Parent
-            matched_parent = result.get('matched_parent', 'NO MATCH FOUND')
-            self.results_table.setItem(row, 1, QTableWidgetItem(str(matched_parent)))
-            
-            # Matched Child
-            matched_child = result.get('matched_child', 'NO CHILD MATCH FOUND')
-            self.results_table.setItem(row, 2, QTableWidgetItem(str(matched_child)))
-            
-            # Amount
-            amount = result.get('amount', 0)
-            if isinstance(amount, (int, float)) and amount > 0:
-                amount_text = f"{amount:.2f}"
-            else:
-                amount_text = ""
-            amount_item = QTableWidgetItem(amount_text)
-            amount_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            self.results_table.setItem(row, 3, amount_item)
-        
-        # Resize rows to fit content after populating
-        self.results_table.resizeRowsToContents()
+        self.editable_table.populate_results_table(self.results_data)
     
     def update_summary(self, results):
         """Update the summary label with statistics"""
@@ -382,6 +314,7 @@ class TransactionMatcherWindow(QMainWindow):
     
     def clear_results(self):
         """Clear all results and reset the interface"""
+        self.editable_table.clear_table()
         self.results_table.setRowCount(0)
         self.results_data = []
         self.summary_label.setText("No results yet. Select files and click 'Process Files' to begin.")
@@ -405,66 +338,125 @@ class TransactionMatcherWindow(QMainWindow):
     
     def export_to_excel(self):
         """Export results to Excel"""
-        if not self.results_data:
+        export_data = self.editable_table.get_all_data()
+        if not export_data:
             QMessageBox.warning(self, "Warning", "No results to export.")
             return
         
         file_path, _ = QFileDialog.getSaveFileName(
-            self, "Export to Excel", "transaction_matching_results.xlsx", 
-            "Excel Files (*.xlsx);;All Files (*)"
+            self, 
+            "Export to Excel", 
+            "transaction_results.xlsx", 
+            "Excel Files (*.xlsx)"
         )
         
         if file_path:
             try:
-                # Convert results to DataFrame and save
-                df = pd.DataFrame(self.results_data)
+                # Convert to DataFrame for export
+                headers = ["Transaction Reference", "Matched Parent", "Matched Child", "Amount"]
+                df = pd.DataFrame(export_data, columns=headers)
                 df.to_excel(file_path, index=False)
                 QMessageBox.information(self, "Success", f"Results exported to {file_path}")
             except Exception as e:
-                QMessageBox.critical(self, "Export Error", f"Failed to export results:\n{str(e)}")
+                QMessageBox.critical(self, "Export Error", f"Failed to export to Excel:\n{str(e)}")
     
     def export_to_csv(self):
         """Export results to CSV"""
-        if not self.results_data:
+        export_data = self.editable_table.get_all_data()
+        if not export_data:
             QMessageBox.warning(self, "Warning", "No results to export.")
             return
         
         file_path, _ = QFileDialog.getSaveFileName(
-            self, "Export to CSV", "transaction_matching_results.csv", 
-            "CSV Files (*.csv);;All Files (*)"
+            self, 
+            "Export to CSV", 
+            "transaction_results.csv", 
+            "CSV Files (*.csv)"
         )
         
         if file_path:
             try:
-                # Convert results to DataFrame and save
-                df = pd.DataFrame(self.results_data)
+                # Convert to DataFrame for export
+                headers = ["Transaction Reference", "Matched Parent", "Matched Child", "Amount"]
+                df = pd.DataFrame(export_data, columns=headers)
                 df.to_csv(file_path, index=False)
                 QMessageBox.information(self, "Success", f"Results exported to {file_path}")
             except Exception as e:
-                QMessageBox.critical(self, "Export Error", f"Failed to export results:\n{str(e)}")
+                QMessageBox.critical(self, "Export Error", f"Failed to export to CSV:\n{str(e)}")
     
     def save_report(self):
-        """Save a detailed report"""
-        # For now, same as export to Excel
-        self.export_to_excel()
+        """Save detailed report"""
+        export_data = self.editable_table.get_all_data()
+        if not export_data:
+            QMessageBox.warning(self, "Warning", "No results to save.")
+            return
+        
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, 
+            "Save Report", 
+            "matching_report.txt", 
+            "Text Files (*.txt)"
+        )
+        
+        if file_path:
+            try:
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write("Fee Transaction Matching Report\n")
+                    f.write("=" * 50 + "\n\n")
+                    
+                    # Write summary
+                    f.write(f"Summary: {self.summary_label.text()}\n\n")
+                    
+                    # Write change summary if there are edits
+                    if self.editable_table.has_changes:
+                        change_summary = self.editable_table.data_manager.get_change_summary()
+                        f.write("Edit Summary:\n")
+                        f.write(f"- Modified cells: {change_summary['modified_cells_count']}\n")
+                        f.write(f"- New rows added: {change_summary['new_rows_count']}\n")
+                        f.write(f"- Rows deleted: {change_summary['deleted_rows_count']}\n\n")
+                    
+                    # Write detailed results
+                    f.write("Detailed Results:\n")
+                    f.write("-" * 20 + "\n")
+                    
+                    headers = ["Transaction Reference", "Matched Parent", "Matched Child", "Amount"]
+                    for i, row_data in enumerate(export_data):
+                        f.write(f"\nRow {i + 1}:\n")
+                        for j, value in enumerate(row_data):
+                            f.write(f"  {headers[j]}: {value}\n")
+                
+                QMessageBox.information(self, "Success", f"Report saved to {file_path}")
+            except Exception as e:
+                QMessageBox.critical(self, "Save Error", f"Failed to save report:\n{str(e)}")
     
     def validate_files(self):
         """Validate the selected files"""
-        if not self.fee_file_path:
-            QMessageBox.information(self, "Validation", "Please select a fee record file first.")
+        if not self.fee_file_path or not self.transaction_file_path:
+            QMessageBox.warning(self, "Warning", "Please select both files first.")
             return
         
-        if not self.transaction_file_path:
-            QMessageBox.information(self, "Validation", "Please select a transaction file first.")
-            return
+        errors = []
         
-        # Check if files exist
+        # Check fee file
         if not os.path.exists(self.fee_file_path):
-            QMessageBox.warning(self, "Validation Error", "Fee record file does not exist.")
-            return
+            errors.append(f"Fee file not found: {self.fee_file_path}")
+        else:
+            try:
+                pd.read_excel(self.fee_file_path)
+            except Exception as e:
+                errors.append(f"Invalid fee file: {str(e)}")
         
+        # Check transaction file
         if not os.path.exists(self.transaction_file_path):
-            QMessageBox.warning(self, "Validation Error", "Transaction file does not exist.")
+            errors.append(f"Transaction file not found: {self.transaction_file_path}")
+        else:
+            try:
+                pd.read_csv(self.transaction_file_path)
+            except Exception as e:
+                errors.append(f"Invalid transaction file: {str(e)}")
+        
+        if errors:
+            QMessageBox.critical(self, "Validation Error", "\n".join(errors))
             return
         
         QMessageBox.information(self, "Validation", "Both files are valid and ready for processing.")
@@ -478,7 +470,14 @@ class TransactionMatcherWindow(QMainWindow):
         QMessageBox.about(self, "About", 
                          "Fee Transaction Matcher v1.0\n\n"
                          "A tool for matching transaction records with fee statements.\n\n"
-                         "Supports fuzzy matching of parent and child names.")
+                         "Features:\n"
+                         "- Fuzzy matching of parent and child names\n"
+                         "- Excel-like table editing\n"
+                         "- Copy/paste functionality\n"
+                         "- Add/delete rows\n"
+                         "- Undo/redo operations\n"
+                         "- Data validation\n"
+                         "- Export to Excel/CSV")
 
 
 def main():
