@@ -1,148 +1,7 @@
 import pandas as pd
 import numpy as np
-from fuzzywuzzy import fuzz
-from fuzzywuzzy import process
-import re
 import openpyxl
-
-def clean_parent_name(name):
-    if pd.isna(name) or not isinstance(name, str):
-        return ""
-    
-    name = str(name).upper().strip()
-    
-    if name.startswith('="'):
-        name = name[2:]
-    if name.endswith('"'):
-        name = name[:-1]
-    
-    prefixes_suffixes = ['BINTI', 'BIN', 'A/P', 'D/O', 'MR', 'MRS', 'MS', 'DR']
-    for prefix in prefixes_suffixes:
-        name = re.sub(rf'\b{prefix}\b', '', name)
-    
-    name = re.sub(r'[-_]', ' ', name)
-    name = re.sub(r'\s+', ' ', name).strip()
-    
-    return name
-
-def extract_parent_names_from_transaction(text):
-    if pd.isna(text) or not isinstance(text, str):
-        return []
-    
-    text = str(text).strip()
-    
-    if text.startswith('="'):
-        text = text[2:]
-    if text.endswith('"'):
-        text = text[:-1]
-    
-    potential_names = []
-    
-    big_space_parts = re.split(r'\s{5,}', text)
-    if len(big_space_parts) > 1:
-        parent_part = big_space_parts[0].strip()
-        if parent_part:
-            cleaned = clean_parent_name(parent_part)
-            if len(cleaned) > 3:
-                potential_names.append(cleaned)
-    
-    parts = text.split(',')
-    for part in parts:
-        part = part.strip()
-        if part:
-            sub_parts = re.split(r'[/\\|]', part)
-            for sub_part in sub_parts:
-                cleaned = clean_parent_name(sub_part)
-                if len(cleaned) > 3:
-                    potential_names.append(cleaned)
-    
-    first_name_match = re.match(r'^([A-Z\s\-\/\.&@]+?)(?:\s{3,}|\s+[a-z])', text)
-    if first_name_match:
-        first_name = first_name_match.group(1).strip()
-        cleaned = clean_parent_name(first_name)
-        if len(cleaned) > 3:
-            potential_names.append(cleaned)
-    
-    whole_cleaned = clean_parent_name(text)
-    if len(whole_cleaned) > 3:
-        potential_names.append(whole_cleaned)
-    
-    seen = set()
-    unique_names = []
-    for name in potential_names:
-        if name not in seen:
-            seen.add(name)
-            unique_names.append(name)
-    
-    return unique_names
-
-def find_best_match(target_name, parent_list, threshold=70):
-    if not target_name or not parent_list:
-        return None, 0
-    
-    cleaned_target = clean_parent_name(target_name)
-    
-    if not cleaned_target:
-        return None, 0
-    
-    cleaned_parents = [clean_parent_name(parent) for parent in parent_list]
-    
-    best_match = None
-    best_score = 0
-    best_original = None
-    
-    for i, cleaned_parent in enumerate(cleaned_parents):
-        if cleaned_target == cleaned_parent:
-            return parent_list[i], 100
-    
-    for i, cleaned_parent in enumerate(cleaned_parents):
-        if cleaned_parent.startswith(cleaned_target) or cleaned_target.startswith(cleaned_parent):
-            score = 95
-            if score > best_score:
-                best_match = cleaned_parent
-                best_score = score
-                best_original = parent_list[i]
-    
-    target_words = set(cleaned_target.split())
-    for i, cleaned_parent in enumerate(cleaned_parents):
-        parent_words = set(cleaned_parent.split())
-        if target_words and parent_words:
-            common_words = target_words.intersection(parent_words)
-            if len(common_words) >= 2:
-                score = (len(common_words) / max(len(target_words), len(parent_words))) * 90
-                if score > best_score:
-                    best_match = cleaned_parent
-                    best_score = score
-                    best_original = parent_list[i]
-    
-    fuzzy_methods = [
-        (fuzz.ratio, "ratio"),
-        (fuzz.partial_ratio, "partial"),
-        (fuzz.token_sort_ratio, "token_sort"),
-        (fuzz.token_set_ratio, "token_set")
-    ]
-    
-    for scorer, method_name in fuzzy_methods:
-        fuzzy_match = process.extractOne(cleaned_target, cleaned_parents, scorer=scorer)
-        if fuzzy_match and fuzzy_match[1] > best_score and fuzzy_match[1] >= threshold:
-            original_index = cleaned_parents.index(fuzzy_match[0])
-            best_match = fuzzy_match[0]
-            best_score = fuzzy_match[1]
-            best_original = parent_list[original_index]
-    
-    if best_score < threshold:
-        for i, cleaned_parent in enumerate(cleaned_parents):
-            if cleaned_target in cleaned_parent or cleaned_parent in cleaned_target:
-                score = min(len(cleaned_target), len(cleaned_parent)) / max(len(cleaned_target), len(cleaned_parent)) * 85
-                if score > best_score and score >= threshold:
-                    best_match = cleaned_parent
-                    best_score = score
-                    best_original = parent_list[i]
-    
-    if best_original and best_score >= threshold:
-        return best_original, best_score
-    
-    return None, 0
+from matchers import ParentMatcher
 
 def process_fee_matching():
     fee_record_file = r"C:\Users\user\Downloads\2025 Tuition Fee.xlsx"
@@ -183,6 +42,9 @@ def process_fee_matching():
         
         parent_names = fee_df.iloc[:, 0].dropna().tolist()
         print(f"Found {len(parent_names)} parent names in fee record")
+        
+        # Initialize the parent matcher
+        parent_matcher = ParentMatcher(threshold=70)
         
         matched_count = 0
         unmatched_count = 0
@@ -227,28 +89,10 @@ def process_fee_matching():
                 })
                 continue
             
-            all_potential_names = []
-            for ref_col in reference_columns:
-                potential_names = extract_parent_names_from_transaction(ref_col)
-                all_potential_names.extend(potential_names)
-            
-            unique_names = []
-            seen = set()
-            for name in all_potential_names:
-                if name not in seen:
-                    seen.add(name)
-                    unique_names.append(name)
-            
-            best_match = None
-            best_score = 0
-            
-            for potential_name in unique_names:
-                match, score = find_best_match(potential_name, parent_names, threshold=70)
-                if match and score > best_score:
-                    best_match = match
-                    best_score = score
-            
             display_parent = transaction_ref
+            
+            # Use the parent matcher class
+            best_match, best_score = parent_matcher.match(reference_columns, parent_names)
             
             if best_match:
                 matched_count += 1
