@@ -278,22 +278,22 @@ def process_fee_matching():
         print(f"Unmatched transactions: {unmatched_count}")
         print(f"Match rate: {match_rate:.1f}%")
         
-        separator_line = "=" * 110
+        separator_line = "=" * 130
         print(f"\n{separator_line}")
-        print(f"{'Index':<6} | {'Parent Name (Transaction File)':<40} | {'Matched Name (Fee Record)':<40} | {'Amount':<10}")
+        print(f"{'Index':<6} | {'Parent Name (Transaction File)':<60} | {'Matched Name (Fee Record)':<40} | {'Amount':<10}")
         print(separator_line)
         
         for result in all_results:
             index = result['index']
-            parent_name = str(result['parent_from_transaction'])[:39] if result['parent_from_transaction'] else ""
+            parent_name = str(result['parent_from_transaction'])[:59] if result['parent_from_transaction'] else ""
             matched_name = str(result['matched_parent'])[:39] if result['matched_parent'] else ""
             amount = result['amount']
             
             if amount == "":
-                empty_line = f"{index:<6} | {'':<40} | {'':<40} | {'':<10}"
+                empty_line = f"{index:<6} | {'':<60} | {'':<40} | {'':<10}"
                 print(empty_line)
             else:
-                data_line = f"{index:<6} | {parent_name:<40} | {matched_name:<40} | {amount:<10.2f}"
+                data_line = f"{index:<6} | {parent_name:<60} | {matched_name:<40} | {amount:<10.2f}"
                 print(data_line)
         
         print(separator_line)
