@@ -146,7 +146,9 @@ def find_best_match(target_name, parent_list, threshold=70):
 
 def process_fee_matching():
     fee_record_file = r"C:\Users\user\Downloads\2025 Tuition Fee.xlsx"
-    transaction_file = r"C:\Users\user\Downloads\Fee Statements\3985094904Statement (5).csv"
+    transaction_file = r"C:\Users\user\Downloads\Fee Statements\3985094904Statement (9).csv"
+    
+    print(f"Transaction File:   {transaction_file}")
     
     try:
         print("Reading fee record file...")
@@ -305,12 +307,41 @@ def process_fee_matching():
         return False
 
 if __name__ == "__main__":
+    print("=" * 50)
+    print("STARTING FEE MATCHING PROGRAM")
+    print("=" * 50)
     print("Note: Make sure you have installed: pip install fuzzywuzzy python-levenshtein openpyxl pandas")
-    print("Starting fee matching process...")
-    success = process_fee_matching()
-    if success:
-        print("Process completed successfully!")
-    else:
-        print("Process failed. Check the error messages above.")
     
-    input("Press Enter to exit...")
+    # Add debugging to track execution
+    import sys
+    import time
+    
+    start_time = time.time()
+    print(f"Program started at: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    try:
+        print("Calling process_fee_matching()...")
+        success = process_fee_matching()
+        
+        end_time = time.time()
+        duration = end_time - start_time
+        
+        print("=" * 50)
+        if success:
+            print("✓ PROCESS COMPLETED SUCCESSFULLY!")
+        else:
+            print("✗ PROCESS FAILED!")
+        print(f"Total execution time: {duration:.2f} seconds")
+        print("=" * 50)
+        
+    except Exception as e:
+        print(f"UNEXPECTED ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+    
+    # Force clean exit
+    print("Program execution finished.")
+    print("Press Enter to close this window...")
+    input()
+    print("Exiting now...")
+    sys.exit(0)
