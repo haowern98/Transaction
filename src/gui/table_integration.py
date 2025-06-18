@@ -2,7 +2,10 @@
 Integration wrapper to replace QTableWidget with EditableTableWidget
 in the existing transaction_main_window.py with minimal changes
 """
-from PyQt5.QtWidgets import QTableWidgetItem, QHeaderView, QMessageBox
+import os
+import csv
+from datetime import datetime
+from PyQt5.QtWidgets import QTableWidgetItem, QHeaderView, QMessageBox, QFileDialog
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
 from gui.table_editor import EditableTableWidget
@@ -31,6 +34,61 @@ class IntegratedEditableTable:
         # Track if we have unsaved changes
         self.has_changes = False
         
+        # Session management
+        self.saved_sessions_dir = "saved_sessions"
+        self._ensure_sessions_directory()
+        
+    def _ensure_sessions_directory(self):
+        """Create saved_sessions directory if it doesn't exist"""
+        if not os.path.exists(self.saved_sessions_dir):
+            os.makedirs(self.saved_sessions_dir)
+            
+    def _generate_session_filename(self):
+        """Generate filename with timestamp: transaction_preview_YYYY-MM-DD_HH-MM-SS.csv"""
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        return f"transaction_preview_{timestamp}.csv"
+        
+    def _get_available_sessions(self):
+        """Get list of available saved session files"""
+        if not os.path.exists(self.saved_sessions_dir):
+            return []
+            
+        session_files = []
+        for filename in os.listdir(self.saved_sessions_dir):
+            if filename.startswith("transaction_preview_") and filename.endswith(".csv"):
+                filepath = os.path.join(self.saved_sessions_dir, filename)
+                # Get file modification time for display
+                mtime = os.path.getmtime(filepath)
+                session_files.append({
+                    'filename': filename,
+                    'filepath': filepath,
+                    'mtime': mtime,
+                    'display_name': self._format_session_display_name(filename, mtime)
+                })
+        
+        # Sort by modification time (newest first)
+        session_files.sort(key=lambda x: x['mtime'], reverse=True)
+        return session_files
+        
+    def _format_session_display_name(self, filename, mtime):
+        """Format session name for display"""
+        # Extract timestamp from filename: transaction_preview_2025-06-19_14-30-15.csv
+        try:
+            timestamp_part = filename.replace("transaction_preview_", "").replace(".csv", "")
+            date_part, time_part = timestamp_part.split("_")
+            year, month, day = date_part.split("-")
+            hour, minute, second = time_part.split("-")
+            
+            # Format as: "June 19, 2025 at 2:30 PM"
+            dt = datetime(int(year), int(month), int(day), int(hour), int(minute), int(second))
+            formatted_date = dt.strftime("%B %d, %Y at %I:%M %p")
+            return f"{formatted_date} ({filename})"
+        except:
+            # Fallback to filename if parsing fails
+            dt = datetime.fromtimestamp(mtime)
+            formatted_date = dt.strftime("%B %d, %Y at %I:%M %p")
+            return f"{formatted_date} ({filename})"
+
     def setup_results_table(self):
         """Setup the results table structure (replaces existing method)"""
         self.table.setColumnCount(4)
@@ -117,7 +175,7 @@ class IntegratedEditableTable:
         self.populate_table(table_data)
         
     def add_toolbar_buttons(self, layout):
-        """Add simplified editing toolbar buttons to the provided layout"""
+        """Add editing toolbar buttons including save/load session functionality"""
         from PyQt5.QtWidgets import QPushButton, QHBoxLayout, QLabel, QSpacerItem, QSizePolicy
         
         # Create editing toolbar
@@ -140,6 +198,15 @@ class IntegratedEditableTable:
         self.reset_btn.clicked.connect(self.reset_to_original)
         edit_toolbar.addWidget(self.reset_btn)
         
+        # Save/Load Session buttons
+        self.save_session_btn = QPushButton("Save Session")
+        self.save_session_btn.clicked.connect(self.save_session)
+        edit_toolbar.addWidget(self.save_session_btn)
+        
+        self.load_session_btn = QPushButton("Load Previous Session")
+        self.load_session_btn.clicked.connect(self.load_session)
+        edit_toolbar.addWidget(self.load_session_btn)
+        
         # Spacer to push everything to the left
         edit_toolbar.addSpacerItem(QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum))
         
@@ -149,6 +216,142 @@ class IntegratedEditableTable:
         # Update button states
         self.update_button_states()
         
+    def save_session(self):
+        """Save current table data to CSV file"""
+        try:
+            # Get current table data
+            table_data = self.get_all_data()
+            
+            if not table_data:
+                QMessageBox.warning(None, "Warning", "No data to save.")
+                return
+                
+            # Ensure directory exists
+            self._ensure_sessions_directory()
+            
+            # Generate filename
+            filename = self._generate_session_filename()
+            filepath = os.path.join(self.saved_sessions_dir, filename)
+            
+            # Save to CSV
+            with open(filepath, 'w', newline='', encoding='utf-8') as csvfile:
+                writer = csv.writer(csvfile)
+                
+                # Write headers
+                headers = ["Transaction Reference", "Matched Parent", "Matched Child", "Amount"]
+                writer.writerow(headers)
+                
+                # Write data
+                for row_data in table_data:
+                    writer.writerow(row_data)
+            
+            QMessageBox.information(None, "Success", 
+                                  f"Session saved successfully!\n\nFile: {filename}")
+            
+        except Exception as e:
+            QMessageBox.critical(None, "Error", 
+                               f"Failed to save session:\n{str(e)}")
+    
+    def load_session(self):
+        """Load a previous session from saved CSV files"""
+        try:
+            # Get available sessions
+            available_sessions = self._get_available_sessions()
+            
+            if not available_sessions:
+                QMessageBox.information(None, "No Sessions", 
+                                      "No saved sessions found.")
+                return
+            
+            # Create selection dialog
+            from PyQt5.QtWidgets import QDialog, QVBoxLayout, QListWidget, QPushButton, QHBoxLayout
+            
+            dialog = QDialog()
+            dialog.setWindowTitle("Load Previous Session")
+            dialog.setModal(True)
+            dialog.resize(500, 300)
+            
+            layout = QVBoxLayout(dialog)
+            
+            # Add instruction label
+            from PyQt5.QtWidgets import QLabel
+            instruction = QLabel("Select a session to load:")
+            layout.addWidget(instruction)
+            
+            # Create list widget
+            session_list = QListWidget()
+            for session in available_sessions:
+                session_list.addItem(session['display_name'])
+            layout.addWidget(session_list)
+            
+            # Add buttons
+            button_layout = QHBoxLayout()
+            load_button = QPushButton("Load Selected")
+            cancel_button = QPushButton("Cancel")
+            
+            button_layout.addWidget(load_button)
+            button_layout.addWidget(cancel_button)
+            layout.addLayout(button_layout)
+            
+            # Connect button signals
+            def load_selected():
+                current_row = session_list.currentRow()
+                if current_row >= 0:
+                    selected_session = available_sessions[current_row]
+                    dialog.accept()
+                    self._load_session_file(selected_session['filepath'])
+                else:
+                    QMessageBox.warning(dialog, "Warning", "Please select a session to load.")
+            
+            load_button.clicked.connect(load_selected)
+            cancel_button.clicked.connect(dialog.reject)
+            
+            # Show dialog
+            dialog.exec_()
+            
+        except Exception as e:
+            QMessageBox.critical(None, "Error", 
+                               f"Failed to load session list:\n{str(e)}")
+    
+    def _load_session_file(self, filepath):
+        """Load table data from a specific CSV file"""
+        try:
+            # Check if current table has unsaved changes
+            if self.has_changes:
+                reply = QMessageBox.question(None, "Unsaved Changes",
+                                           "You have unsaved changes. Loading a session will discard them.\n\n"
+                                           "Do you want to continue?",
+                                           QMessageBox.Yes | QMessageBox.No,
+                                           QMessageBox.No)
+                if reply != QMessageBox.Yes:
+                    return
+            
+            # Read CSV file
+            table_data = []
+            with open(filepath, 'r', encoding='utf-8') as csvfile:
+                reader = csv.reader(csvfile)
+                headers = next(reader)  # Skip header row
+                
+                for row in reader:
+                    # Ensure row has exactly 4 columns
+                    while len(row) < 4:
+                        row.append("")
+                    table_data.append(row[:4])  # Take only first 4 columns
+            
+            # Load data into table
+            self.populate_table(table_data)
+            
+            # Extract filename for display
+            filename = os.path.basename(filepath)
+            
+            QMessageBox.information(None, "Success", 
+                                  f"Session loaded successfully!\n\nFile: {filename}\n"
+                                  f"Loaded {len(table_data)} rows of data.")
+            
+        except Exception as e:
+            QMessageBox.critical(None, "Error", 
+                               f"Failed to load session:\n{str(e)}")
+    
     def add_new_row(self):
         """Add a new row at the end"""
         self.table.add_new_row()
@@ -192,8 +395,6 @@ class IntegratedEditableTable:
             
     def save_changes(self):
         """Save current changes"""
-        from PyQt5.QtWidgets import QFileDialog
-        
         filename, _ = QFileDialog.getSaveFileName(
             None,
             "Save Changes",
@@ -291,6 +492,13 @@ class IntegratedEditableTable:
             self.undo_btn.setEnabled(len(self.data_manager.undo_stack) > 0)
             self.redo_btn.setEnabled(len(self.data_manager.redo_stack) > 0)
             self.reset_btn.setEnabled(self.has_changes)
+            
+        # Save/Load session buttons are always enabled
+        if hasattr(self, 'save_session_btn'):
+            # Save is enabled when there's data
+            self.save_session_btn.setEnabled(self.table.rowCount() > 0)
+            # Load is always enabled
+            self.load_session_btn.setEnabled(True)
                 
     def get_all_data(self):
         """Get all current table data for export"""

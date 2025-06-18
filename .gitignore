@@ -1,25 +1,20 @@
-# Telegram Bot .gitignore for Render Deployment
+# Transaction Matcher .gitignore
 
 # =============================================
-# SENSITIVE DATA - NEVER COMMIT THESE!
+# SAVED SESSIONS - Don't commit user sessions
 # =============================================
+saved_sessions/
+*.csv
+transaction_preview_*.csv
 
-# Bot token and API keys
-token.txt
-*.env
-.env*
-config_secrets.py
-
-# User data and scheduled calls
+# =============================================
+# SENSITIVE DATA & USER FILES
+# =============================================
+*.xlsx
+*.xls
 data/
 logs/
 *.log
-bot.log
-
-# Database files
-*.db
-*.sqlite
-*.sqlite3
 
 # =============================================
 # PYTHON
@@ -55,6 +50,15 @@ MANIFEST
 *.manifest
 *.spec
 
+# Virtual environments
+venv/
+venv*/
+env/
+ENV/
+env.bak/
+venv.bak/
+.venv
+
 # Unit test / coverage reports
 htmlcov/
 .tox/
@@ -69,15 +73,6 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 cover/
-
-# Virtual environments
-venv/
-venv*/
-env/
-ENV/
-env.bak/
-venv.bak/
-.venv
 
 # =============================================
 # DEVELOPMENT FILES
@@ -112,23 +107,25 @@ temp_*
 # PROJECT SPECIFIC
 # =============================================
 
-# Test files you created
-check_imports.py
-simple_test.py
-test_bot_creation.py
-detailed_test.py
-test_url.py
-check_timezone.py
+# Test files
 test_*.py
+*_test.py
+tests/
 
 # Backup files
 *.bak
 *.backup
 *~
 
-# Local configuration (if you create any)
+# Local configuration files
 local_config.py
-dev_config.py
+config_local.py
+settings_local.py
+
+# Output files
+output/
+results/
+reports/
 
 # =============================================
 # WHAT TO INCLUDE (DON'T IGNORE)
@@ -137,10 +134,9 @@ dev_config.py
 # These files SHOULD be committed:
 # src/
 # requirements.txt
-# Procfile
-# render.yaml
 # README.md
 # .gitignore (this file)
 
-# Note: Your bot token will be set as environment variable in Render
-# so it won't be in your code files
+# Example files for documentation (if any)
+!example_*.csv
+!sample_*.xlsx
