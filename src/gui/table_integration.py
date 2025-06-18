@@ -25,6 +25,9 @@ class IntegratedEditableTable:
         self.table.row_deleted.connect(self.on_row_deleted)
         self.data_manager.validation_error.connect(self.on_validation_error)
         
+        # CRITICAL FIX: Connect table's item change to data manager
+        self.table.itemChanged.connect(self.on_table_item_changed)
+        
         # Track if we have unsaved changes
         self.has_changes = False
         
@@ -39,57 +42,65 @@ class IntegratedEditableTable:
         
         # Make all columns manually resizable and fill the full width
         header = self.table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.Interactive)  # Transaction Reference - resizable
-        header.setSectionResizeMode(1, QHeaderView.Interactive)  # Matched Parent - resizable
-        header.setSectionResizeMode(2, QHeaderView.Interactive)  # Matched Child - resizable
-        header.setSectionResizeMode(3, QHeaderView.Interactive)  # Amount - resizable
+        header.setSectionResizeMode(0, QHeaderView.Interactive)
+        header.setSectionResizeMode(1, QHeaderView.Interactive)
+        header.setSectionResizeMode(2, QHeaderView.Interactive)  
+        header.setSectionResizeMode(3, QHeaderView.Interactive)
         
-        # Make the last column stretch to fill any remaining space
-        header.setStretchLastSection(True)
-        
-        # Set initial column widths that will fill most of the table width
-        self.table.setColumnWidth(0, 1600)  # Transaction Reference - large
+        # Set minimum column widths for better UX
+        self.table.setColumnWidth(0, 1600)  # Transaction Reference
         self.table.setColumnWidth(1, 250)  # Matched Parent
-        self.table.setColumnWidth(2, 250)  # Matched Child  
-        # Amount column will stretch to fill remaining space
+        self.table.setColumnWidth(2, 250)  # Matched Child
         
-        # Enable text wrapping for long content
+        # Enable word wrap for first column
         self.table.setWordWrap(True)
         
-        # Set default row height to accommodate wrapped text
-        self.table.verticalHeader().setDefaultSectionSize(50)
+        # Set table font size
+        font = QFont()
+        font.setPointSize(9)
+        self.table.setFont(font)
         
-        # Enable sorting
-        self.table.setSortingEnabled(True)
+    def populate_table(self, table_data):
+        """Populate table with data"""
+        self.table.setRowCount(len(table_data))
         
-        # Set alternating row colors
-        self.table.setAlternatingRowColors(True)
+        # Store data in data manager
+        self.data_manager.set_original_data(table_data, self.data_manager.column_headers)
+        
+        # Also set original data in table editor for visual tracking
+        self.table.set_original_data(table_data)
+        
+        for row, row_data in enumerate(table_data):
+            for col, value in enumerate(row_data):
+                item = QTableWidgetItem(str(value))
+                if col == 3:  # Amount column
+                    item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                elif col == 0:  # Transaction Reference
+                    item.setFlags(item.flags() | Qt.TextWordWrap)
+                self.table.setItem(row, col, item)
+        
+        self.table.resizeRowsToContents()
+        self.has_changes = False
+        self.update_button_states()
         
     def populate_results_table(self, results_data):
-        """Populate the results table with data (replaces existing method)"""
-        self.table.setRowCount(len(results_data))
-        
-        # Prepare data for data manager
+        """Populate the results table with processed data"""
+        # Convert results data to table format
         table_data = []
         
-        for row, result in enumerate(results_data):
+        for result in results_data:
             row_data = []
             
-            # Transaction Reference - no truncation, full text
+            # Transaction Reference
             trans_ref = result.get('parent_from_transaction', '')
-            trans_ref_item = QTableWidgetItem(str(trans_ref))
-            trans_ref_item.setFlags(trans_ref_item.flags() | Qt.TextWordWrap)
-            self.table.setItem(row, 0, trans_ref_item)
             row_data.append(str(trans_ref))
             
             # Matched Parent
             matched_parent = result.get('matched_parent', 'NO MATCH FOUND')
-            self.table.setItem(row, 1, QTableWidgetItem(str(matched_parent)))
             row_data.append(str(matched_parent))
             
             # Matched Child
             matched_child = result.get('matched_child', 'NO CHILD MATCH FOUND')
-            self.table.setItem(row, 2, QTableWidgetItem(str(matched_child)))
             row_data.append(str(matched_child))
             
             # Amount
@@ -98,23 +109,12 @@ class IntegratedEditableTable:
                 amount_text = f"{amount:.2f}"
             else:
                 amount_text = ""
-            amount_item = QTableWidgetItem(amount_text)
-            amount_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            self.table.setItem(row, 3, amount_item)
             row_data.append(amount_text)
             
             table_data.append(row_data)
         
-        # Set original data in data manager and table
-        headers = ["Transaction Reference", "Matched Parent", "Matched Child", "Amount"]
-        self.data_manager.set_original_data(table_data, headers)
-        self.table.set_original_data(table_data)
-        
-        # Resize rows to fit content after populating
-        self.table.resizeRowsToContents()
-        
-        # Reset change tracking
-        self.has_changes = False
+        # Use the standard populate_table method
+        self.populate_table(table_data)
         
     def add_toolbar_buttons(self, layout):
         """Add simplified editing toolbar buttons to the provided layout"""
@@ -182,11 +182,13 @@ class IntegratedEditableTable:
         """Undo last change"""
         if self.data_manager.undo():
             self.refresh_table_from_data_manager()
+            self.update_button_states()
             
     def redo_changes(self):
         """Redo last undone change"""
         if self.data_manager.redo():
             self.refresh_table_from_data_manager()
+            self.update_button_states()
             
     def save_changes(self):
         """Save current changes"""
@@ -225,6 +227,9 @@ class IntegratedEditableTable:
         data = self.data_manager.current_data
         self.table.setRowCount(len(data))
         
+        # Temporarily disconnect to avoid recursive updates
+        self.table.itemChanged.disconnect()
+        
         for row in range(len(data)):
             for col in range(len(data[row]) if row < len(data) else 0):
                 item = QTableWidgetItem(str(data[row][col]))
@@ -233,10 +238,28 @@ class IntegratedEditableTable:
                 elif col == 0:  # Transaction Reference
                     item.setFlags(item.flags() | Qt.TextWordWrap)
                 self.table.setItem(row, col, item)
+        
+        # Reconnect the signal
+        self.table.itemChanged.connect(self.on_table_item_changed)
                 
         # Update visual indicators
         self.table.refresh_all_cell_appearances()
         self.table.resizeRowsToContents()
+        
+    def on_table_item_changed(self, item):
+        """CRITICAL FIX: Handle table item changes and sync with data manager"""
+        if item is None:
+            return
+            
+        row = item.row()
+        col = item.column()
+        new_value = item.text()
+        
+        # Update the data manager (this creates undo points automatically)
+        self.data_manager.update_cell(row, col, new_value)
+        
+        # Update button states since we may have new undo points
+        self.update_button_states()
         
     def on_data_changed(self):
         """Handle data changes"""
@@ -245,11 +268,15 @@ class IntegratedEditableTable:
         
     def on_row_added(self, row_index):
         """Handle row addition"""
+        # Also add to data manager
+        self.data_manager.add_new_row(row_index)
         self.has_changes = True
         self.update_button_states()
         
     def on_row_deleted(self, row_index):
         """Handle row deletion"""
+        # Also delete from data manager
+        self.data_manager.delete_row(row_index)
         self.has_changes = True
         self.update_button_states()
         
