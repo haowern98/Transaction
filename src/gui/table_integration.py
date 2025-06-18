@@ -48,7 +48,7 @@ class IntegratedEditableTable:
         header.setStretchLastSection(True)
         
         # Set initial column widths that will fill most of the table width
-        self.table.setColumnWidth(0, 1200)  # Transaction Reference - large
+        self.table.setColumnWidth(0, 1600)  # Transaction Reference - large
         self.table.setColumnWidth(1, 250)  # Matched Parent
         self.table.setColumnWidth(2, 250)  # Matched Child  
         # Amount column will stretch to fill remaining space
@@ -117,24 +117,11 @@ class IntegratedEditableTable:
         self.has_changes = False
         
     def add_toolbar_buttons(self, layout):
-        """Add editing toolbar buttons to the provided layout"""
+        """Add simplified editing toolbar buttons to the provided layout"""
         from PyQt5.QtWidgets import QPushButton, QHBoxLayout, QLabel, QSpacerItem, QSizePolicy
         
         # Create editing toolbar
         edit_toolbar = QHBoxLayout()
-        
-        # Add row button
-        self.add_row_btn = QPushButton("Add Row")
-        self.add_row_btn.clicked.connect(self.add_new_row)
-        edit_toolbar.addWidget(self.add_row_btn)
-        
-        # Delete selected rows button
-        self.delete_rows_btn = QPushButton("Delete Selected")
-        self.delete_rows_btn.clicked.connect(self.delete_selected_rows)
-        edit_toolbar.addWidget(self.delete_rows_btn)
-        
-        # Separator
-        edit_toolbar.addWidget(QLabel("|"))
         
         # Undo/Redo buttons
         self.undo_btn = QPushButton("Undo")
@@ -148,22 +135,13 @@ class IntegratedEditableTable:
         # Separator
         edit_toolbar.addWidget(QLabel("|"))
         
-        # Save/Reset buttons
-        self.save_changes_btn = QPushButton("Save Changes")
-        self.save_changes_btn.clicked.connect(self.save_changes)
-        edit_toolbar.addWidget(self.save_changes_btn)
-        
+        # Reset button
         self.reset_btn = QPushButton("Reset All")
         self.reset_btn.clicked.connect(self.reset_to_original)
         edit_toolbar.addWidget(self.reset_btn)
         
-        # Spacer
+        # Spacer to push everything to the left
         edit_toolbar.addSpacerItem(QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum))
-        
-        # Status label
-        self.changes_label = QLabel("No changes")
-        self.changes_label.setStyleSheet("color: gray; font-style: italic;")
-        edit_toolbar.addWidget(self.changes_label)
         
         # Add to main layout
         layout.addLayout(edit_toolbar)
@@ -281,29 +259,11 @@ class IntegratedEditableTable:
                           f"Row {row + 1}, Column {col + 1}: {message}")
         
     def update_button_states(self):
-        """Update button enabled states and change indicator"""
+        """Update button enabled states"""
         if hasattr(self, 'undo_btn'):
             self.undo_btn.setEnabled(len(self.data_manager.undo_stack) > 0)
             self.redo_btn.setEnabled(len(self.data_manager.redo_stack) > 0)
-            self.save_changes_btn.setEnabled(self.has_changes)
             self.reset_btn.setEnabled(self.has_changes)
-            
-            # Update changes label
-            if self.has_changes:
-                summary = self.data_manager.get_change_summary()
-                changes_text = []
-                if summary['modified_cells_count'] > 0:
-                    changes_text.append(f"{summary['modified_cells_count']} modified")
-                if summary['new_rows_count'] > 0:
-                    changes_text.append(f"{summary['new_rows_count']} added")
-                if summary['deleted_rows_count'] > 0:
-                    changes_text.append(f"{summary['deleted_rows_count']} deleted")
-                
-                self.changes_label.setText(" | ".join(changes_text))
-                self.changes_label.setStyleSheet("color: orange; font-weight: bold;")
-            else:
-                self.changes_label.setText("No changes")
-                self.changes_label.setStyleSheet("color: gray; font-style: italic;")
                 
     def get_all_data(self):
         """Get all current table data for export"""
