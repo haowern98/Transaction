@@ -38,7 +38,7 @@ class EditableTableWidget(QTableWidget):
     def setup_table_properties(self):
         """Configure table properties for Excel-like behavior"""
         # Enable sorting
-        self.setSortingEnabled(True)
+        # self.setSortingEnabled(True)
         
         # Set selection behavior
         self.setSelectionBehavior(QTableWidget.SelectItems)

@@ -249,7 +249,7 @@ class TransactionMatcherWindow(QMainWindow):
         self.results_table.verticalHeader().setDefaultSectionSize(50)
         
         # Enable sorting
-        self.results_table.setSortingEnabled(True)
+        # self.results_table.setSortingEnabled(True)
         
         # Set alternating row colors
         self.results_table.setAlternatingRowColors(True)
