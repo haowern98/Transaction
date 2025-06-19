@@ -3,6 +3,7 @@ Data manager for tracking and validating table changes
 """
 import json
 import copy
+from datetime import datetime
 from typing import Dict, List, Any, Optional, Tuple
 from PyQt5.QtCore import QObject, pyqtSignal
 
@@ -45,26 +46,41 @@ class TableDataManager(QObject):
                 'type': 'text',
                 'max_length': 500
             },
-            # Column 1: Matched Parent - text
+            # Column 1: Transaction Date - DD/MM/YYYY format
             1: {
-                'required': False,
-                'type': 'text',
-                'max_length': 200
+                'required': True,
+                'type': 'date',
+                'format': 'DD/MM/YYYY',
+                'max_length': 10
             },
-            # Column 2: Matched Child - text  
+            # Column 2: Matched Parent - text
             2: {
                 'required': False,
                 'type': 'text',
                 'max_length': 200
             },
-            # Column 3: Amount - should be numeric
+            # Column 3: Matched Child - text  
             3: {
+                'required': False,
+                'type': 'text',
+                'max_length': 200
+            },
+            # Column 4: Amount - should be numeric
+            4: {
                 'required': False,
                 'type': 'number',
                 'min_value': 0,
                 'max_value': 999999.99
             }
         }
+        
+    def validate_date_format(self, date_string):
+        """Validate date string in DD/MM/YYYY format"""
+        try:
+            datetime.strptime(date_string, '%d/%m/%Y')
+            return True
+        except ValueError:
+            return False
         
     def set_original_data(self, data: List[List[Any]], headers: List[str]):
         """Set the original data from processing results"""
@@ -188,7 +204,13 @@ class TableDataManager(QObject):
             
         # Type validation
         if value_str and 'type' in rules:
-            if rules['type'] == 'number':
+            if rules['type'] == 'date':
+                # Validate date format DD/MM/YYYY
+                if not self.validate_date_format(value_str):
+                    self.validation_error.emit("Date must be in DD/MM/YYYY format", row, col)
+                    return False
+                    
+            elif rules['type'] == 'number':
                 try:
                     num_value = float(value_str)
                     

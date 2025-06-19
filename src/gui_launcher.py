@@ -1,6 +1,6 @@
 """
 Main window for the Transaction Matcher GUI application
-Updated with Excel-like editing capabilities
+Updated with Excel-like editing capabilities and transaction date column
 Save this as: src/gui_launcher.py
 """
 import sys
@@ -353,7 +353,7 @@ class TransactionMatcherWindow(QMainWindow):
         if file_path:
             try:
                 # Convert to DataFrame for export
-                headers = ["Transaction Reference", "Matched Parent", "Matched Child", "Amount"]
+                headers = ["Transaction Reference", "Transaction Date", "Matched Parent", "Matched Child", "Amount"]
                 df = pd.DataFrame(export_data, columns=headers)
                 df.to_excel(file_path, index=False)
                 QMessageBox.information(self, "Success", f"Results exported to {file_path}")
@@ -377,7 +377,7 @@ class TransactionMatcherWindow(QMainWindow):
         if file_path:
             try:
                 # Convert to DataFrame for export
-                headers = ["Transaction Reference", "Matched Parent", "Matched Child", "Amount"]
+                headers = ["Transaction Reference", "Transaction Date", "Matched Parent", "Matched Child", "Amount"]
                 df = pd.DataFrame(export_data, columns=headers)
                 df.to_csv(file_path, index=False)
                 QMessageBox.information(self, "Success", f"Results exported to {file_path}")
@@ -419,7 +419,7 @@ class TransactionMatcherWindow(QMainWindow):
                     f.write("Detailed Results:\n")
                     f.write("-" * 20 + "\n")
                     
-                    headers = ["Transaction Reference", "Matched Parent", "Matched Child", "Amount"]
+                    headers = ["Transaction Reference", "Transaction Date", "Matched Parent", "Matched Child", "Amount"]
                     for i, row_data in enumerate(export_data):
                         f.write(f"\nRow {i + 1}:\n")
                         for j, value in enumerate(row_data):
@@ -477,7 +477,8 @@ class TransactionMatcherWindow(QMainWindow):
                          "- Add/delete rows\n"
                          "- Undo/redo operations\n"
                          "- Data validation\n"
-                         "- Export to Excel/CSV")
+                         "- Export to Excel/CSV\n"
+                         "- Transaction date extraction and validation")
 
 
 def main():

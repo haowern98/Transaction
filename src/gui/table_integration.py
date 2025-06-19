@@ -90,9 +90,9 @@ class IntegratedEditableTable:
             return f"{formatted_date} ({filename})"
 
     def setup_results_table(self):
-        """Setup the results table structure (replaces existing method)"""
-        self.table.setColumnCount(4)
-        headers = ["Transaction Reference", "Matched Parent", "Matched Child", "Amount"]
+        """Setup the results table structure with 5 columns including transaction date"""
+        self.table.setColumnCount(5)
+        headers = ["Transaction Reference", "Transaction Date", "Matched Parent", "Matched Child", "Amount"]
         self.table.setHorizontalHeaderLabels(headers)
         
         # Store headers in data manager
@@ -100,15 +100,18 @@ class IntegratedEditableTable:
         
         # Make all columns manually resizable and fill the full width
         header = self.table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.Interactive)
-        header.setSectionResizeMode(1, QHeaderView.Interactive)
-        header.setSectionResizeMode(2, QHeaderView.Interactive)  
-        header.setSectionResizeMode(3, QHeaderView.Interactive)
+        header.setSectionResizeMode(0, QHeaderView.Interactive)  # Transaction Reference
+        header.setSectionResizeMode(1, QHeaderView.Interactive)  # Transaction Date
+        header.setSectionResizeMode(2, QHeaderView.Interactive)  # Matched Parent
+        header.setSectionResizeMode(3, QHeaderView.Interactive)  # Matched Child
+        header.setSectionResizeMode(4, QHeaderView.Interactive)  # Amount
         
-        # Set minimum column widths for better UX
-        self.table.setColumnWidth(0, 1600)  # Transaction Reference
-        self.table.setColumnWidth(1, 250)  # Matched Parent
-        self.table.setColumnWidth(2, 250)  # Matched Child
+        # Set column widths
+        self.table.setColumnWidth(0, 1600)   # Transaction Reference
+        self.table.setColumnWidth(1, 200)   # Transaction Date
+        self.table.setColumnWidth(2, 200)   # Matched Parent
+        self.table.setColumnWidth(3, 200)   # Matched Child
+        # Amount column will stretch to fill remaining space
         
         # Enable word wrap for first column
         self.table.setWordWrap(True)
@@ -131,8 +134,10 @@ class IntegratedEditableTable:
         for row, row_data in enumerate(table_data):
             for col, value in enumerate(row_data):
                 item = QTableWidgetItem(str(value))
-                if col == 3:  # Amount column
+                if col == 4:  # Amount column (now column 4)
                     item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                elif col == 1:  # Transaction Date column
+                    item.setTextAlignment(Qt.AlignCenter | Qt.AlignVCenter)
                 elif col == 0:  # Transaction Reference
                     item.setFlags(item.flags() | Qt.TextWordWrap)
                 self.table.setItem(row, col, item)
@@ -152,6 +157,10 @@ class IntegratedEditableTable:
             # Transaction Reference
             trans_ref = result.get('parent_from_transaction', '')
             row_data.append(str(trans_ref))
+            
+            # Transaction Date
+            transaction_date = result.get('transaction_date', '')
+            row_data.append(str(transaction_date))
             
             # Matched Parent
             matched_parent = result.get('matched_parent', 'NO MATCH FOUND')
@@ -238,7 +247,7 @@ class IntegratedEditableTable:
                 writer = csv.writer(csvfile)
                 
                 # Write headers
-                headers = ["Transaction Reference", "Matched Parent", "Matched Child", "Amount"]
+                headers = ["Transaction Reference", "Transaction Date", "Matched Parent", "Matched Child", "Amount"]
                 writer.writerow(headers)
                 
                 # Write data
@@ -333,10 +342,10 @@ class IntegratedEditableTable:
                 headers = next(reader)  # Skip header row
                 
                 for row in reader:
-                    # Ensure row has exactly 4 columns
-                    while len(row) < 4:
+                    # Ensure row has exactly 5 columns
+                    while len(row) < 5:
                         row.append("")
-                    table_data.append(row[:4])  # Take only first 4 columns
+                    table_data.append(row[:5])  # Take only first 5 columns
             
             # Load data into table
             self.populate_table(table_data)
@@ -434,8 +443,10 @@ class IntegratedEditableTable:
         for row in range(len(data)):
             for col in range(len(data[row]) if row < len(data) else 0):
                 item = QTableWidgetItem(str(data[row][col]))
-                if col == 3:  # Amount column
+                if col == 4:  # Amount column (now column 4)
                     item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                elif col == 1:  # Transaction Date column
+                    item.setTextAlignment(Qt.AlignCenter | Qt.AlignVCenter)
                 elif col == 0:  # Transaction Reference
                     item.setFlags(item.flags() | Qt.TextWordWrap)
                 self.table.setItem(row, col, item)

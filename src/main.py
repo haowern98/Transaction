@@ -59,7 +59,24 @@ def process_fee_matching_gui(fee_record_file, transaction_file):
         
         for idx, row in trans_df.iterrows():
             transaction_ref = ""
+            transaction_date = ""
             amount = 0
+            
+            # Extract transaction date from column 0 (first column)
+            if len(trans_df.columns) > 0:
+                date_val = row['Col_0']
+                if pd.notna(date_val) and str(date_val).strip():
+                    raw_date = str(date_val).strip()
+                    # Clean Excel formatting from date
+                    if raw_date.startswith('="'):
+                        raw_date = raw_date[2:]
+                    if raw_date.endswith('"'):
+                        raw_date = raw_date[:-1]
+                    # Check if it's a header row - make empty if "Trn. Date"
+                    if raw_date == "Trn. Date":
+                        transaction_date = ""
+                    else:
+                        transaction_date = raw_date
             
             # Extract reference columns
             reference_columns = []
@@ -92,6 +109,7 @@ def process_fee_matching_gui(fee_record_file, transaction_file):
                 all_results.append({
                     'index': idx,
                     'parent_from_transaction': "",
+                    'transaction_date': transaction_date,
                     'matched_parent': "",
                     'matched_child': "",
                     'amount': "",
@@ -123,6 +141,7 @@ def process_fee_matching_gui(fee_record_file, transaction_file):
             all_results.append({
                 'index': idx,
                 'parent_from_transaction': display_parent,
+                'transaction_date': transaction_date,
                 'matched_parent': best_parent_match.strip() if best_parent_match else "NO MATCH FOUND",
                 'matched_child': best_child_match.strip() if best_child_match else "NO CHILD MATCH FOUND",
                 'amount': amount,
