@@ -12,6 +12,9 @@ sys.path.insert(0, current_dir)
 from core.processor import process_fee_matching
 from gui.transaction_window import run_gui_application
 
+# Import zoom system initialization
+from gui.zoom import initialize_zoom_system
+
 
 def main():
     """Main entry point for the application"""
@@ -22,7 +25,7 @@ def main():
         process_fee_matching()
         return
     
-    # GUI mode (default)
+    # GUI mode (default) - zoom will be initialized inside run_gui_application
     run_gui_application()
 
 

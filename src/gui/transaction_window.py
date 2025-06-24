@@ -354,4 +354,23 @@ def run_gui_application():
     window = TransactionMatcherWindow()
     window.show()
     
+    # ADD THESE LINES FOR ZOOM FUNCTIONALITY:
+    try:
+        from gui.zoom import initialize_zoom_system, add_zoom_buttons_to_main_window
+        from PyQt5.QtCore import QTimer
+        
+        # Initialize zoom system
+        print("Initializing zoom system...")
+        initialize_zoom_system()
+        
+        # Add zoom buttons after a short delay
+        def add_buttons():
+            print("Adding zoom buttons...")
+            add_zoom_buttons_to_main_window()
+        
+        QTimer.singleShot(1000, add_buttons)  # 1 second delay
+        
+    except Exception as e:
+        print(f"Warning: Could not add zoom functionality: {e}")
+    
     sys.exit(app.exec_())
