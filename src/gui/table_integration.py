@@ -1,6 +1,7 @@
 """
 Integration wrapper to replace QTableWidget with EditableTableWidget
 in the existing transaction_main_window.py with minimal changes
+Updated with date filtering functionality
 """
 import os
 import csv
@@ -10,6 +11,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
 from gui.table_editor import EditableTableWidget
 from gui.table_data_manager import TableDataManager
+from gui.date_filter import DateFilterDialog, DateFilterProcessor
 
 
 class IntegratedEditableTable:
@@ -192,7 +194,7 @@ class IntegratedEditableTable:
         self.populate_table(table_data)
         
     def add_toolbar_buttons(self, layout):
-        """Add editing toolbar buttons including save/load session functionality"""
+        """Add editing toolbar buttons including save/load session functionality and date filter"""
         from PyQt5.QtWidgets import QPushButton, QHBoxLayout, QLabel, QSpacerItem, QSizePolicy
         
         # Create editing toolbar
@@ -215,6 +217,17 @@ class IntegratedEditableTable:
         self.reset_btn.clicked.connect(self.reset_to_original)
         edit_toolbar.addWidget(self.reset_btn)
         
+        # Separator
+        edit_toolbar.addWidget(QLabel("|"))
+        
+        # NEW: Date Filter button
+        self.filter_date_btn = QPushButton("Filter by Date")
+        self.filter_date_btn.clicked.connect(self.filter_by_date)
+        edit_toolbar.addWidget(self.filter_date_btn)
+        
+        # Separator
+        edit_toolbar.addWidget(QLabel("|"))
+        
         # Save/Load Session buttons
         self.save_session_btn = QPushButton("Save Session")
         self.save_session_btn.clicked.connect(self.save_session)
@@ -232,7 +245,64 @@ class IntegratedEditableTable:
         
         # Update button states
         self.update_button_states()
-        
+
+    def filter_by_date(self):
+        """Open date filter dialog and apply filter"""
+        try:
+            # Get current table data
+            current_data = self.get_all_data()
+            
+            if not current_data:
+                QMessageBox.warning(None, "Warning", "No data to filter.")
+                return
+            
+            # Create and show date filter dialog
+            dialog = DateFilterDialog(current_data, None)
+            dialog.filter_requested.connect(self.apply_date_filter)
+            dialog.exec_()
+            
+        except Exception as e:
+            QMessageBox.critical(None, "Error", f"Failed to open date filter:\n{str(e)}")
+    
+    def apply_date_filter(self, cutoff_date):
+        """Apply the date filter to the table"""
+        try:
+            # Get current table data
+            current_data = self.get_all_data()
+            
+            # Create processor to get indices to delete
+            processor = DateFilterProcessor()
+            indices_to_delete = processor.get_row_indices_to_delete(current_data, cutoff_date)
+            
+            if not indices_to_delete:
+                QMessageBox.information(None, "No Changes", "No transactions match the filter criteria.")
+                return
+            
+            # Create single undo point for the entire operation
+            self.data_manager.create_undo_point()
+            
+            # Delete rows in reverse order to maintain correct indices
+            for row_index in sorted(indices_to_delete, reverse=True):
+                self.data_manager.delete_row(row_index, create_undo_point=False)
+            
+            # Refresh table display
+            self.refresh_table_from_data_manager()
+            
+            # Update change tracking
+            self.has_changes = True
+            self.update_button_states()
+            
+            # Show success message
+            deleted_count = len(indices_to_delete)
+            remaining_count = len(current_data) - deleted_count
+            
+            QMessageBox.information(None, "Filter Applied", 
+                                  f"Successfully deleted {deleted_count} transactions.\n"
+                                  f"{remaining_count} transactions remain.")
+            
+        except Exception as e:
+            QMessageBox.critical(None, "Error", f"Failed to apply date filter:\n{str(e)}")
+
     def save_session(self):
         """Save current table data to CSV file"""
         try:
@@ -514,7 +584,11 @@ class IntegratedEditableTable:
             self.redo_btn.setEnabled(len(self.data_manager.redo_stack) > 0)
             self.reset_btn.setEnabled(self.has_changes)
             
-        # Save/Load session buttons are always enabled
+        # Filter button is enabled when there's data
+        if hasattr(self, 'filter_date_btn'):
+            self.filter_date_btn.setEnabled(self.table.rowCount() > 0)
+            
+        # Save/Load session buttons
         if hasattr(self, 'save_session_btn'):
             # Save is enabled when there's data
             self.save_session_btn.setEnabled(self.table.rowCount() > 0)

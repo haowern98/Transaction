@@ -191,8 +191,9 @@ class TableDataManager(QObject):
         # Remove from current data
         del self.current_data[row_index]
         
-        # Update indices in tracking dictionaries
-        self.update_indices_after_delete(row_index)
+        # Update indices in tracking dictionaries (only if not in bulk operation)
+        if create_undo_point:  # This indicates it's not part of a bulk operation
+            self.update_indices_after_delete(row_index)
         
         return True
         
@@ -432,6 +433,35 @@ class TableDataManager(QObject):
         except Exception as e:
             print(f"Error saving changes: {e}")
             return False
+        
+    def bulk_delete_rows(self, row_indices: List[int], create_undo_point: bool = True):
+        """
+        Delete multiple rows efficiently
+        
+        Args:
+            row_indices: List of row indices to delete (will be sorted automatically)
+            create_undo_point: Whether to create an undo point
+            
+        Returns:
+            bool: True if successful
+        """
+        if not row_indices:
+            return True
+            
+        if create_undo_point:
+            self.create_undo_point()
+        
+        # Sort indices in descending order to maintain correct indices during deletion
+        sorted_indices = sorted(set(row_indices), reverse=True)
+        
+        deleted_count = 0
+        for row_index in sorted_indices:
+            if row_index < len(self.current_data):
+                # Delete the row (without creating individual undo points)
+                if self.delete_row(row_index, create_undo_point=False):
+                    deleted_count += 1
+        
+        return deleted_count > 0    
             
     def load_changes_from_file(self, filename: str):
         """Load changes from a JSON file"""
@@ -457,3 +487,70 @@ class TableDataManager(QObject):
         except Exception as e:
             print(f"Error loading changes: {e}")
             return False
+
+    def update_indices_after_bulk_delete(self, deleted_indices: List[int]):
+        """
+        Update row indices in tracking after bulk deletion
+        
+        Args:
+            deleted_indices: List of deleted row indices (should be sorted in descending order)
+        """
+        # Create mapping of old indices to new indices
+        index_mapping = {}
+        offset = 0
+        
+        sorted_deleted = sorted(deleted_indices)
+        current_index = 0
+        
+        for original_index in range(len(self.current_data) + len(deleted_indices)):
+            if original_index in sorted_deleted:
+                offset += 1
+            else:
+                index_mapping[original_index] = current_index
+                current_index += 1
+        
+        # Update modified_cells
+        new_modified_cells = {}
+        for (row, col), change in self.modified_cells.items():
+            if row in index_mapping:
+                new_modified_cells[(index_mapping[row], col)] = change
+        self.modified_cells = new_modified_cells
+        
+        # Update new_rows
+        new_rows = {}
+        for row, data in self.new_rows.items():
+            if row in index_mapping:
+                new_rows[index_mapping[row]] = data
+        self.new_rows = new_rows
+
+    # Add this method to get statistics about operations:
+
+    def get_deletion_stats(self, row_indices: List[int]) -> dict:
+        """
+        Get statistics about what would be deleted
+        
+        Args:
+            row_indices: List of row indices to analyze
+            
+        Returns:
+            dict: Statistics about the deletion operation
+        """
+        stats = {
+            'total_to_delete': len(row_indices),
+            'new_rows_to_delete': 0,
+            'original_rows_to_delete': 0,
+            'modified_cells_affected': 0
+        }
+        
+        for row_index in row_indices:
+            if row_index in self.new_rows:
+                stats['new_rows_to_delete'] += 1
+            else:
+                stats['original_rows_to_delete'] += 1
+            
+            # Count modified cells in this row
+            for (mod_row, mod_col) in self.modified_cells.keys():
+                if mod_row == row_index:
+                    stats['modified_cells_affected'] += 1
+        
+        return stats        
