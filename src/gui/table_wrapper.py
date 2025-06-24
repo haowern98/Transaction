@@ -1,21 +1,18 @@
 """
-Integration wrapper to replace QTableWidget with EditableTableWidget
-in the existing transaction_main_window.py with minimal changes
-Updated with date filtering functionality
+Core table integration wrapper
+Provides the main interface for the editable table with basic operations
 """
 import os
-import csv
-from datetime import datetime
-from PyQt5.QtWidgets import QTableWidgetItem, QHeaderView, QMessageBox, QFileDialog
+from PyQt5.QtWidgets import QTableWidgetItem, QHeaderView, QMessageBox
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
-from gui.table_editor import EditableTableWidget
-from gui.table_data_manager import TableDataManager
-from gui.date_filter import DateFilterDialog, DateFilterProcessor
+
+from gui.editable_table import EditableTableWidget
+from gui.data_manager import TableDataManager
 
 
 class IntegratedEditableTable:
-    """Wrapper to integrate EditableTableWidget with existing code"""
+    """Core wrapper to integrate EditableTableWidget with data management"""
     
     def __init__(self, parent=None):
         # Create the editable table widget
@@ -30,84 +27,26 @@ class IntegratedEditableTable:
         self.table.row_deleted.connect(self.on_row_deleted)
         self.data_manager.validation_error.connect(self.on_validation_error)
         
-        # CRITICAL FIX: Connect table's item change to data manager
+        # Connect table's item change to data manager
         self.table.itemChanged.connect(self.on_table_item_changed)
         
         # Track if we have unsaved changes
         self.has_changes = False
         
-        # Session management
-        self.saved_sessions_dir = "saved_sessions"
-        self._ensure_sessions_directory()
-        
-    def _ensure_sessions_directory(self):
-        """Create saved_sessions directory if it doesn't exist"""
-        if not os.path.exists(self.saved_sessions_dir):
-            os.makedirs(self.saved_sessions_dir)
-            
-    def _generate_session_filename(self):
-        """Generate filename with timestamp: transaction_preview_YYYY-MM-DD_HH-MM-SS.csv"""
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        return f"transaction_preview_{timestamp}.csv"
-        
-    def _get_available_sessions(self):
-        """Get list of available saved session files"""
-        if not os.path.exists(self.saved_sessions_dir):
-            return []
-            
-        session_files = []
-        for filename in os.listdir(self.saved_sessions_dir):
-            if filename.startswith("transaction_preview_") and filename.endswith(".csv"):
-                filepath = os.path.join(self.saved_sessions_dir, filename)
-                # Get file modification time for display
-                mtime = os.path.getmtime(filepath)
-                session_files.append({
-                    'filename': filename,
-                    'filepath': filepath,
-                    'mtime': mtime,
-                    'display_name': self._format_session_display_name(filename, mtime)
-                })
-        
-        # Sort by modification time (newest first)
-        session_files.sort(key=lambda x: x['mtime'], reverse=True)
-        return session_files
-        
-    def _format_session_display_name(self, filename, mtime):
-        """Format session name for display"""
-        # Extract timestamp from filename: transaction_preview_2025-06-19_14-30-15.csv
-        try:
-            timestamp_part = filename.replace("transaction_preview_", "").replace(".csv", "")
-            date_part, time_part = timestamp_part.split("_")
-            year, month, day = date_part.split("-")
-            hour, minute, second = time_part.split("-")
-            
-            # Format as: "June 19, 2025 at 2:30 PM"
-            dt = datetime(int(year), int(month), int(day), int(hour), int(minute), int(second))
-            formatted_date = dt.strftime("%B %d, %Y at %I:%M %p")
-            return f"{formatted_date} ({filename})"
-        except:
-            # Fallback to filename if parsing fails
-            dt = datetime.fromtimestamp(mtime)
-            formatted_date = dt.strftime("%B %d, %Y at %I:%M %p")
-            return f"{formatted_date} ({filename})"
-
     def setup_results_table(self):
         """Setup the results table structure with 6 columns including month paying for"""
         self.table.setColumnCount(6)
-        headers = ["Transaction Reference", "Transaction Date", "Matched Parent", "Matched Child", "Month Paying For", "Amount"]
+        headers = ["Transaction Reference", "Transaction Date", "Matched Parent", 
+                  "Matched Child", "Month Paying For", "Amount"]
         self.table.setHorizontalHeaderLabels(headers)
         
         # Store headers in data manager
         self.data_manager.column_headers = headers
         
-        # Make all columns manually resizable and fill the full width
+        # Configure column resizing
         header = self.table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.Interactive)  # Transaction Reference
-        header.setSectionResizeMode(1, QHeaderView.Interactive)  # Transaction Date
-        header.setSectionResizeMode(2, QHeaderView.Interactive)  # Matched Parent
-        header.setSectionResizeMode(3, QHeaderView.Interactive)  # Matched Child
-        header.setSectionResizeMode(4, QHeaderView.Interactive)  # Month Paying For
-        header.setSectionResizeMode(5, QHeaderView.Interactive)  # Amount
+        for i in range(6):
+            header.setSectionResizeMode(i, QHeaderView.Interactive)
         
         # Set column widths
         self.table.setColumnWidth(0, 1400)   # Transaction Reference
@@ -138,19 +77,21 @@ class IntegratedEditableTable:
         for row, row_data in enumerate(table_data):
             for col, value in enumerate(row_data):
                 item = QTableWidgetItem(str(value))
-                if col == 5:  # Amount column (now column 5)
-                    item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-                elif col == 1:  # Transaction Date column
-                    item.setTextAlignment(Qt.AlignCenter | Qt.AlignVCenter)
-                elif col == 4:  # Month Paying For column
-                    item.setTextAlignment(Qt.AlignCenter | Qt.AlignVCenter)
-                elif col == 0:  # Transaction Reference
-                    item.setFlags(item.flags() | Qt.TextWordWrap)
+                self._set_item_alignment(item, col)
                 self.table.setItem(row, col, item)
         
         self.table.resizeRowsToContents()
         self.has_changes = False
         self.update_button_states()
+    
+    def _set_item_alignment(self, item, col):
+        """Set appropriate alignment for table items based on column"""
+        if col == 5:  # Amount column
+            item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        elif col in [1, 4]:  # Transaction Date and Month columns
+            item.setTextAlignment(Qt.AlignCenter | Qt.AlignVCenter)
+        elif col == 0:  # Transaction Reference
+            item.setFlags(item.flags() | Qt.TextWordWrap)
         
     def populate_results_table(self, results_data):
         """Populate the results table with processed data"""
@@ -194,7 +135,7 @@ class IntegratedEditableTable:
         self.populate_table(table_data)
         
     def add_toolbar_buttons(self, layout):
-        """Add editing toolbar buttons including save/load session functionality and date filter"""
+        """Add editing toolbar buttons including operations and filters"""
         from PyQt5.QtWidgets import QPushButton, QHBoxLayout, QLabel, QSpacerItem, QSizePolicy
         
         # Create editing toolbar
@@ -220,7 +161,7 @@ class IntegratedEditableTable:
         # Separator
         edit_toolbar.addWidget(QLabel("|"))
         
-        # NEW: Date Filter button
+        # Date Filter button
         self.filter_date_btn = QPushButton("Filter by Date")
         self.filter_date_btn.clicked.connect(self.filter_by_date)
         edit_toolbar.addWidget(self.filter_date_btn)
@@ -249,6 +190,8 @@ class IntegratedEditableTable:
     def filter_by_date(self):
         """Open date filter dialog and apply filter"""
         try:
+            from gui.date_filter import DateFilterDialog
+            
             # Get current table data
             current_data = self.get_all_data()
             
@@ -267,6 +210,8 @@ class IntegratedEditableTable:
     def apply_date_filter(self, cutoff_date):
         """Apply the date filter to the table"""
         try:
+            from gui.date_filter import DateFilterProcessor
+            
             # Get current table data
             current_data = self.get_all_data()
             
@@ -306,138 +251,18 @@ class IntegratedEditableTable:
     def save_session(self):
         """Save current table data to CSV file"""
         try:
-            # Get current table data
-            table_data = self.get_all_data()
-            
-            if not table_data:
-                QMessageBox.warning(None, "Warning", "No data to save.")
-                return
-                
-            # Ensure directory exists
-            self._ensure_sessions_directory()
-            
-            # Generate filename
-            filename = self._generate_session_filename()
-            filepath = os.path.join(self.saved_sessions_dir, filename)
-            
-            # Save to CSV
-            with open(filepath, 'w', newline='', encoding='utf-8') as csvfile:
-                writer = csv.writer(csvfile)
-                
-                # Write headers
-                headers = ["Transaction Reference", "Transaction Date", "Matched Parent", "Matched Child", "Month Paying For", "Amount"]
-                writer.writerow(headers)
-                
-                # Write data
-                for row_data in table_data:
-                    writer.writerow(row_data)
-            
-            QMessageBox.information(None, "Success", 
-                                  f"Session saved successfully!\n\nFile: {filename}")
-            
+            from gui.session_manager import save_table_session
+            save_table_session(self)
         except Exception as e:
-            QMessageBox.critical(None, "Error", 
-                               f"Failed to save session:\n{str(e)}")
+            QMessageBox.critical(None, "Error", f"Failed to save session:\n{str(e)}")
     
     def load_session(self):
         """Load a previous session from saved CSV files"""
         try:
-            # Get available sessions
-            available_sessions = self._get_available_sessions()
-            
-            if not available_sessions:
-                QMessageBox.information(None, "No Sessions", 
-                                      "No saved sessions found.")
-                return
-            
-            # Create selection dialog
-            from PyQt5.QtWidgets import QDialog, QVBoxLayout, QListWidget, QPushButton, QHBoxLayout
-            
-            dialog = QDialog()
-            dialog.setWindowTitle("Load Previous Session")
-            dialog.setModal(True)
-            dialog.resize(500, 300)
-            
-            layout = QVBoxLayout(dialog)
-            
-            # Add instruction label
-            from PyQt5.QtWidgets import QLabel
-            instruction = QLabel("Select a session to load:")
-            layout.addWidget(instruction)
-            
-            # Create list widget
-            session_list = QListWidget()
-            for session in available_sessions:
-                session_list.addItem(session['display_name'])
-            layout.addWidget(session_list)
-            
-            # Add buttons
-            button_layout = QHBoxLayout()
-            load_button = QPushButton("Load Selected")
-            cancel_button = QPushButton("Cancel")
-            
-            button_layout.addWidget(load_button)
-            button_layout.addWidget(cancel_button)
-            layout.addLayout(button_layout)
-            
-            # Connect button signals
-            def load_selected():
-                current_row = session_list.currentRow()
-                if current_row >= 0:
-                    selected_session = available_sessions[current_row]
-                    dialog.accept()
-                    self._load_session_file(selected_session['filepath'])
-                else:
-                    QMessageBox.warning(dialog, "Warning", "Please select a session to load.")
-            
-            load_button.clicked.connect(load_selected)
-            cancel_button.clicked.connect(dialog.reject)
-            
-            # Show dialog
-            dialog.exec_()
-            
+            from gui.session_manager import load_table_session
+            load_table_session(self)
         except Exception as e:
-            QMessageBox.critical(None, "Error", 
-                               f"Failed to load session list:\n{str(e)}")
-    
-    def _load_session_file(self, filepath):
-        """Load table data from a specific CSV file"""
-        try:
-            # Check if current table has unsaved changes
-            if self.has_changes:
-                reply = QMessageBox.question(None, "Unsaved Changes",
-                                           "You have unsaved changes. Loading a session will discard them.\n\n"
-                                           "Do you want to continue?",
-                                           QMessageBox.Yes | QMessageBox.No,
-                                           QMessageBox.No)
-                if reply != QMessageBox.Yes:
-                    return
-            
-            # Read CSV file
-            table_data = []
-            with open(filepath, 'r', encoding='utf-8') as csvfile:
-                reader = csv.reader(csvfile)
-                headers = next(reader)  # Skip header row
-                
-                for row in reader:
-                    # Ensure row has exactly 6 columns
-                    while len(row) < 6:
-                        row.append("")
-                    table_data.append(row[:6])  # Take only first 6 columns
-            
-            # Load data into table
-            self.populate_table(table_data)
-            
-            # Extract filename for display
-            filename = os.path.basename(filepath)
-            
-            QMessageBox.information(None, "Success", 
-                                  f"Session loaded successfully!\n\nFile: {filename}\n"
-                                  f"Loaded {len(table_data)} rows of data.")
-            
-        except Exception as e:
-            QMessageBox.critical(None, "Error", 
-                               f"Failed to load session:\n{str(e)}")
+            QMessageBox.critical(None, "Error", f"Failed to load session:\n{str(e)}")
     
     def add_new_row(self):
         """Add a new row at the end"""
@@ -480,23 +305,6 @@ class IntegratedEditableTable:
             self.refresh_table_from_data_manager()
             self.update_button_states()
             
-    def save_changes(self):
-        """Save current changes"""
-        filename, _ = QFileDialog.getSaveFileName(
-            None,
-            "Save Changes",
-            "table_changes.json",
-            "JSON Files (*.json)"
-        )
-        
-        if filename:
-            if self.data_manager.save_changes_to_file(filename):
-                QMessageBox.information(None, "Success", "Changes saved successfully!")
-                self.has_changes = False
-                self.update_button_states()
-            else:
-                QMessageBox.warning(None, "Error", "Failed to save changes.")
-                
     def reset_to_original(self):
         """Reset table to original data"""
         reply = QMessageBox.question(None, "Confirm Reset", 
@@ -521,14 +329,7 @@ class IntegratedEditableTable:
         for row in range(len(data)):
             for col in range(len(data[row]) if row < len(data) else 0):
                 item = QTableWidgetItem(str(data[row][col]))
-                if col == 5:  # Amount column (now column 5)
-                    item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-                elif col == 1:  # Transaction Date column
-                    item.setTextAlignment(Qt.AlignCenter | Qt.AlignVCenter)
-                elif col == 4:  # Month Paying For column
-                    item.setTextAlignment(Qt.AlignCenter | Qt.AlignVCenter)
-                elif col == 0:  # Transaction Reference
-                    item.setFlags(item.flags() | Qt.TextWordWrap)
+                self._set_item_alignment(item, col)
                 self.table.setItem(row, col, item)
         
         # Reconnect the signal
@@ -539,7 +340,7 @@ class IntegratedEditableTable:
         self.table.resizeRowsToContents()
         
     def on_table_item_changed(self, item):
-        """CRITICAL FIX: Handle table item changes and sync with data manager"""
+        """Handle table item changes and sync with data manager"""
         if item is None:
             return
             
@@ -547,10 +348,10 @@ class IntegratedEditableTable:
         col = item.column()
         new_value = item.text()
         
-        # Update the data manager (this creates undo points automatically)
+        # Update the data manager
         self.data_manager.update_cell(row, col, new_value)
         
-        # Update button states since we may have new undo points
+        # Update button states
         self.update_button_states()
         
     def on_data_changed(self):
@@ -582,7 +383,10 @@ class IntegratedEditableTable:
         if hasattr(self, 'undo_btn'):
             self.undo_btn.setEnabled(len(self.data_manager.undo_stack) > 0)
             self.redo_btn.setEnabled(len(self.data_manager.redo_stack) > 0)
-            self.reset_btn.setEnabled(self.has_changes)
+            # Enable reset if data manager has changes OR table has unsaved changes
+            has_data_changes = self.data_manager.has_unsaved_changes()
+            has_table_changes = self.table.has_unsaved_changes()
+            self.reset_btn.setEnabled(has_data_changes or has_table_changes or self.has_changes)
             
         # Filter button is enabled when there's data
         if hasattr(self, 'filter_date_btn'):

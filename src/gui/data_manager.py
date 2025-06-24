@@ -1,5 +1,6 @@
 """
-Data manager for tracking and validating table changes
+Core data manager for table operations
+Handles data storage, manipulation, and basic operations without validation
 """
 import json
 import copy
@@ -9,7 +10,7 @@ from PyQt5.QtCore import QObject, pyqtSignal
 
 
 class TableDataManager(QObject):
-    """Manages table data, change tracking, and validation"""
+    """Core data manager for table operations"""
     
     # Signals
     validation_error = pyqtSignal(str, int, int)  # message, row, col
@@ -28,66 +29,10 @@ class TableDataManager(QObject):
         self.new_rows = {}        # {row_index: [values]}
         self.deleted_rows = {}    # {original_row_index: [original_values]}
         
-        # Validation rules
-        self.validation_rules = {}
-        self.setup_default_validation_rules()
-        
         # Undo/redo stacks
         self.undo_stack = []
         self.redo_stack = []
         self.max_undo_levels = 50
-        
-    def setup_default_validation_rules(self):
-        """Setup default validation rules for transaction table"""
-        self.validation_rules = {
-            # Column 0: Transaction Reference - should not be empty
-            0: {
-                'required': True,
-                'type': 'text',
-                'max_length': 500
-            },
-            # Column 1: Transaction Date - DD/MM/YYYY format
-            1: {
-                'required': True,
-                'type': 'date',
-                'format': 'DD/MM/YYYY',
-                'max_length': 10
-            },
-            # Column 2: Matched Parent - text
-            2: {
-                'required': False,
-                'type': 'text',
-                'max_length': 200
-            },
-            # Column 3: Matched Child - text  
-            3: {
-                'required': False,
-                'type': 'text',
-                'max_length': 200
-            },
-            # Column 4: Month Paying For - 3-letter month format
-            4: {
-                'required': False,
-                'type': 'month',
-                'valid_months': ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                               'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-            },
-            # Column 5: Amount - should be numeric
-            5: {
-                'required': False,
-                'type': 'number',
-                'min_value': 0,
-                'max_value': 999999.99
-            }
-        }
-        
-    def validate_date_format(self, date_string):
-        """Validate date string in DD/MM/YYYY format"""
-        try:
-            datetime.strptime(date_string, '%d/%m/%Y')
-            return True
-        except ValueError:
-            return False
         
     def set_original_data(self, data: List[List[Any]], headers: List[str]):
         """Set the original data from processing results"""
@@ -117,8 +62,10 @@ class TableDataManager(QObject):
         else:
             old_value = ""
             
-        # Validate new value
-        if not self.validate_cell_value(row, col, new_value):
+        # Validate new value using validation tracker
+        from gui.validation_tracker import ValidationTracker
+        validator = ValidationTracker()
+        if not validator.validate_cell_value(row, col, new_value):
             return False
             
         # Ensure current_data has enough rows/cols
@@ -196,70 +143,6 @@ class TableDataManager(QObject):
             self.update_indices_after_delete(row_index)
         
         return True
-        
-    def validate_cell_value(self, row: int, col: int, value: Any) -> bool:
-        """Validate a cell value against rules"""
-        if col not in self.validation_rules:
-            return True
-            
-        rules = self.validation_rules[col]
-        value_str = str(value).strip()
-        
-        # Required field check
-        if rules.get('required', False) and not value_str:
-            self.validation_error.emit(f"Column {self.column_headers[col]} is required", row, col)
-            return False
-            
-        # Type validation
-        if value_str and 'type' in rules:
-            if rules['type'] == 'date':
-                # Validate date format DD/MM/YYYY
-                if not self.validate_date_format(value_str):
-                    self.validation_error.emit("Date must be in DD/MM/YYYY format", row, col)
-                    return False
-                    
-            elif rules['type'] == 'month':
-                # Validate month format (3-letter month)
-                valid_months = rules.get('valid_months', [])
-                if value_str not in valid_months:
-                    self.validation_error.emit("Month must be in 3-letter format (Jan, Feb, etc.)", row, col)
-                    return False
-                    
-            elif rules['type'] == 'number':
-                try:
-                    num_value = float(value_str)
-                    
-                    # Min/max value checks
-                    if 'min_value' in rules and num_value < rules['min_value']:
-                        self.validation_error.emit(f"Value must be >= {rules['min_value']}", row, col)
-                        return False
-                        
-                    if 'max_value' in rules and num_value > rules['max_value']:
-                        self.validation_error.emit(f"Value must be <= {rules['max_value']}", row, col)
-                        return False
-                        
-                except ValueError:
-                    self.validation_error.emit("Value must be a number", row, col)
-                    return False
-                    
-            elif rules['type'] == 'text':
-                # Max length check
-                if 'max_length' in rules and len(value_str) > rules['max_length']:
-                    self.validation_error.emit(f"Text too long (max {rules['max_length']} characters)", row, col)
-                    return False
-                    
-        return True
-        
-    def validate_all_data(self) -> List[Tuple[int, int, str]]:
-        """Validate all data and return list of errors"""
-        errors = []
-        
-        for row in range(len(self.current_data)):
-            for col in range(len(self.current_data[row])):
-                if not self.validate_cell_value(row, col, self.current_data[row][col]):
-                    errors.append((row, col, "Validation failed"))
-                    
-        return errors
         
     def create_undo_point(self):
         """Create an undo point"""
@@ -412,28 +295,6 @@ class TableDataManager(QObject):
         self.current_data = copy.deepcopy(self.original_data)
         self.clear_change_tracking()
         
-    def save_changes_to_file(self, filename: str):
-        """Save current changes to a JSON file"""
-        from PyQt5.QtCore import QDateTime
-        
-        changes_data = {
-            'timestamp': str(QDateTime.currentDateTime().toString()),
-            'original_data': self.original_data,
-            'current_data': self.current_data,
-            'modified_cells': {f"{k[0]},{k[1]}": v for k, v in self.modified_cells.items()},
-            'new_rows': self.new_rows,
-            'deleted_rows': self.deleted_rows,
-            'column_headers': self.column_headers
-        }
-        
-        try:
-            with open(filename, 'w', encoding='utf-8') as f:
-                json.dump(changes_data, f, indent=2, ensure_ascii=False)
-            return True
-        except Exception as e:
-            print(f"Error saving changes: {e}")
-            return False
-        
     def bulk_delete_rows(self, row_indices: List[int], create_undo_point: bool = True):
         """
         Delete multiple rows efficiently
@@ -461,70 +322,8 @@ class TableDataManager(QObject):
                 if self.delete_row(row_index, create_undo_point=False):
                     deleted_count += 1
         
-        return deleted_count > 0    
-            
-    def load_changes_from_file(self, filename: str):
-        """Load changes from a JSON file"""
-        try:
-            with open(filename, 'r', encoding='utf-8') as f:
-                changes_data = json.load(f)
-                
-            self.original_data = changes_data.get('original_data', [])
-            self.current_data = changes_data.get('current_data', [])
-            self.column_headers = changes_data.get('column_headers', [])
-            
-            # Restore modified_cells with tuple keys
-            modified_cells_str = changes_data.get('modified_cells', {})
-            self.modified_cells = {}
-            for key_str, value in modified_cells_str.items():
-                row, col = map(int, key_str.split(','))
-                self.modified_cells[(row, col)] = value
-                
-            self.new_rows = changes_data.get('new_rows', {})
-            self.deleted_rows = changes_data.get('deleted_rows', {})
-            
-            return True
-        except Exception as e:
-            print(f"Error loading changes: {e}")
-            return False
-
-    def update_indices_after_bulk_delete(self, deleted_indices: List[int]):
-        """
-        Update row indices in tracking after bulk deletion
+        return deleted_count > 0
         
-        Args:
-            deleted_indices: List of deleted row indices (should be sorted in descending order)
-        """
-        # Create mapping of old indices to new indices
-        index_mapping = {}
-        offset = 0
-        
-        sorted_deleted = sorted(deleted_indices)
-        current_index = 0
-        
-        for original_index in range(len(self.current_data) + len(deleted_indices)):
-            if original_index in sorted_deleted:
-                offset += 1
-            else:
-                index_mapping[original_index] = current_index
-                current_index += 1
-        
-        # Update modified_cells
-        new_modified_cells = {}
-        for (row, col), change in self.modified_cells.items():
-            if row in index_mapping:
-                new_modified_cells[(index_mapping[row], col)] = change
-        self.modified_cells = new_modified_cells
-        
-        # Update new_rows
-        new_rows = {}
-        for row, data in self.new_rows.items():
-            if row in index_mapping:
-                new_rows[index_mapping[row]] = data
-        self.new_rows = new_rows
-
-    # Add this method to get statistics about operations:
-
     def get_deletion_stats(self, row_indices: List[int]) -> dict:
         """
         Get statistics about what would be deleted
@@ -553,4 +352,108 @@ class TableDataManager(QObject):
                 if mod_row == row_index:
                     stats['modified_cells_affected'] += 1
         
-        return stats        
+        return stats
+        
+    def save_changes_to_file(self, filename: str):
+        """Save current changes to a JSON file"""
+        from PyQt5.QtCore import QDateTime
+        
+        changes_data = {
+            'timestamp': str(QDateTime.currentDateTime().toString()),
+            'original_data': self.original_data,
+            'current_data': self.current_data,
+            'modified_cells': {f"{k[0]},{k[1]}": v for k, v in self.modified_cells.items()},
+            'new_rows': self.new_rows,
+            'deleted_rows': self.deleted_rows,
+            'column_headers': self.column_headers
+        }
+        
+        try:
+            with open(filename, 'w', encoding='utf-8') as f:
+                json.dump(changes_data, f, indent=2, ensure_ascii=False)
+            return True
+        except Exception as e:
+            print(f"Error saving changes: {e}")
+            return False
+            
+    def load_changes_from_file(self, filename: str):
+        """Load changes from a JSON file"""
+        try:
+            with open(filename, 'r', encoding='utf-8') as f:
+                changes_data = json.load(f)
+                
+            self.original_data = changes_data.get('original_data', [])
+            self.current_data = changes_data.get('current_data', [])
+            self.column_headers = changes_data.get('column_headers', [])
+            
+            # Restore modified_cells with tuple keys
+            modified_cells_str = changes_data.get('modified_cells', {})
+            self.modified_cells = {}
+            for key_str, value in modified_cells_str.items():
+                row, col = map(int, key_str.split(','))
+                self.modified_cells[(row, col)] = value
+                
+            self.new_rows = changes_data.get('new_rows', {})
+            self.deleted_rows = changes_data.get('deleted_rows', {})
+            
+            return True
+        except Exception as e:
+            print(f"Error loading changes: {e}")
+            return False
+            
+    def get_row_data(self, row_index: int) -> List[Any]:
+        """Get data for a specific row"""
+        if row_index < len(self.current_data):
+            return self.current_data[row_index].copy()
+        return []
+        
+    def get_column_data(self, col_index: int) -> List[Any]:
+        """Get data for a specific column"""
+        column_data = []
+        for row in self.current_data:
+            if col_index < len(row):
+                column_data.append(row[col_index])
+            else:
+                column_data.append("")
+        return column_data
+        
+    def get_cell_data(self, row: int, col: int) -> Any:
+        """Get data for a specific cell"""
+        if row < len(self.current_data) and col < len(self.current_data[row]):
+            return self.current_data[row][col]
+        return ""
+        
+    def set_cell_data(self, row: int, col: int, value: Any):
+        """Set data for a specific cell"""
+        self.update_cell(row, col, value)
+        
+    def insert_column(self, col_index: int, header: str = ""):
+        """Insert a new column at the specified index"""
+        # Add to column headers
+        if header:
+            self.column_headers.insert(col_index, header)
+        else:
+            self.column_headers.insert(col_index, f"Column {col_index + 1}")
+            
+        # Add to all rows
+        for row in self.current_data:
+            row.insert(col_index, "")
+            
+        # Also add to original data for consistency
+        for row in self.original_data:
+            row.insert(col_index, "")
+            
+    def delete_column(self, col_index: int):
+        """Delete a column at the specified index"""
+        if col_index < len(self.column_headers):
+            del self.column_headers[col_index]
+            
+        # Remove from all rows
+        for row in self.current_data:
+            if col_index < len(row):
+                del row[col_index]
+                
+        # Also remove from original data
+        for row in self.original_data:
+            if col_index < len(row):
+                del row[col_index]
