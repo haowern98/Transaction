@@ -109,7 +109,7 @@ def process_fee_matching_gui(fee_record_file, transaction_file):
                 all_results.append({
                     'index': idx,
                     'parent_from_transaction': "",
-                    'transaction_date': transaction_date,
+                    'transaction_date': "",
                     'matched_parent': "",
                     'matched_child': "",
                     'amount': "",
