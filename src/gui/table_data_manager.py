@@ -65,8 +65,15 @@ class TableDataManager(QObject):
                 'type': 'text',
                 'max_length': 200
             },
-            # Column 4: Amount - should be numeric
+            # Column 4: Month Paying For - 3-letter month format
             4: {
+                'required': False,
+                'type': 'month',
+                'valid_months': ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                               'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+            },
+            # Column 5: Amount - should be numeric
+            5: {
                 'required': False,
                 'type': 'number',
                 'min_value': 0,
@@ -208,6 +215,13 @@ class TableDataManager(QObject):
                 # Validate date format DD/MM/YYYY
                 if not self.validate_date_format(value_str):
                     self.validation_error.emit("Date must be in DD/MM/YYYY format", row, col)
+                    return False
+                    
+            elif rules['type'] == 'month':
+                # Validate month format (3-letter month)
+                valid_months = rules.get('valid_months', [])
+                if value_str not in valid_months:
+                    self.validation_error.emit("Month must be in 3-letter format (Jan, Feb, etc.)", row, col)
                     return False
                     
             elif rules['type'] == 'number':

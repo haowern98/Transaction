@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import openpyxl
-from matchers import ParentMatcher, ChildMatcher
+from matchers import ParentMatcher, ChildMatcher, MonthMatcher
 
 def process_fee_matching_gui(fee_record_file, transaction_file):
     """
@@ -50,6 +50,7 @@ def process_fee_matching_gui(fee_record_file, transaction_file):
         # Initialize matchers
         parent_matcher = ParentMatcher(threshold=70)
         child_matcher = ChildMatcher(threshold=70)
+        month_matcher = MonthMatcher(threshold=70)
         
         matched_count = 0
         unmatched_count = 0
@@ -112,6 +113,7 @@ def process_fee_matching_gui(fee_record_file, transaction_file):
                     'transaction_date': "",
                     'matched_parent': "",
                     'matched_child': "",
+                    'month_paying_for': "",
                     'amount': "",
                     'matched': False
                 })
@@ -124,6 +126,9 @@ def process_fee_matching_gui(fee_record_file, transaction_file):
             
             # Match child names
             best_child_match, child_score = child_matcher.match(reference_columns, fee_df, best_parent_match)
+            
+            # Extract month for fee payment
+            extracted_month, month_score = month_matcher.match(reference_columns, transaction_date)
             
             # Count matches
             if best_parent_match:
@@ -144,6 +149,7 @@ def process_fee_matching_gui(fee_record_file, transaction_file):
                 'transaction_date': transaction_date,
                 'matched_parent': best_parent_match.strip() if best_parent_match else "NO MATCH FOUND",
                 'matched_child': best_child_match.strip() if best_child_match else "NO CHILD MATCH FOUND",
+                'month_paying_for': extracted_month if extracted_month else "NO MONTH FOUND",
                 'amount': amount,
                 'matched': has_match
             })
