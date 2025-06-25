@@ -38,32 +38,7 @@ class SettingsTab(QWidget):
         
         # Create settings content area with tabs
         self.settings_tabs = QTabWidget()
-        self.settings_tabs.setStyleSheet("""
-            QTabWidget::pane {
-                border: none;
-                background-color: #ffffff;
-            }
-            QTabBar::tab {
-                background-color: #f6f8fa;
-                border: 1px solid #d0d7de;
-                border-bottom: none;
-                padding: 8px 16px;
-                margin-right: 2px;
-                font-size: 11px;
-                font-weight: 500;
-                color: #656d76;
-                min-width: 60px;
-            }
-            QTabBar::tab:selected {
-                background-color: #ffffff;
-                color: #24292e;
-                font-weight: 600;
-            }
-            QTabBar::tab:hover:!selected {
-                background-color: #f3f4f6;
-                color: #24292e;
-            }
-        """)
+        # NO CUSTOM STYLING - use default Qt styling to match main tabs
         main_layout.addWidget(self.settings_tabs)
         
         # Add only the General tab for now

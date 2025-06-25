@@ -140,3 +140,5 @@ reports/
 # Example files for documentation (if any)
 !example_*.csv
 !sample_*.xlsx
+
+transaction_matcher_settings.json

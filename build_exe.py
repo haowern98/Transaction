@@ -37,7 +37,7 @@ def build_single_exe():
     
     cmd = [
         "pyinstaller",
-        "src/gui_launcher.py",
+        "src/main.py",                  # CHANGED: Use main.py instead of gui_launcher.py
         "--onefile",                    # Single EXE only
         "--name", "TransactionMatcher", # EXE name
         "--windowed",                   # No console window
@@ -59,7 +59,7 @@ def main():
     print("=" * 45)
     
     # Check requirements
-    if not Path("src/gui_launcher.py").exists():
+    if not Path("src/main.py").exists():
         print("❌ Run from project root (folder with 'src' directory)")
         sys.exit(1)
     
@@ -72,13 +72,23 @@ def main():
     if not build_single_exe():
         sys.exit(1)
     
-    # Check result
+    # Check result and copy to project root
     exe_path = Path("dist/TransactionMatcher.exe")
     if exe_path.exists():
         size_mb = exe_path.stat().st_size / (1024 * 1024)
+        
+        # Copy EXE to project root
+        final_exe = Path("TransactionMatcher.exe")
+        shutil.copy2(exe_path, final_exe)
+        
+        # Clean up build artifacts
+        shutil.rmtree('build', ignore_errors=True)
+        shutil.rmtree('dist', ignore_errors=True)
+        
         print(f"\n🎉 Success!")
-        print(f"📁 Created: {exe_path}")
+        print(f"📁 Created: {final_exe}")
         print(f"📏 Size: {size_mb:.1f} MB")
+        print(f"🧹 Cleaned up build folders")
         print(f"\n✅ Ready to distribute: Just share TransactionMatcher.exe")
     else:
         print("❌ EXE not found!")
