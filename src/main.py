@@ -13,7 +13,7 @@ from core.processor import process_fee_matching
 from gui.transaction_window import run_gui_application
 
 # Import zoom system initialization
-from gui.zoom import initialize_zoom_system
+from gui.settings import initialize_zoom_system_complete as initialize_zoom_system
 
 
 def main():

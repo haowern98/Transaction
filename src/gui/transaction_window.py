@@ -8,7 +8,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QTabWidget, QWidget,
                             QVBoxLayout, QHBoxLayout, QGroupBox, QLabel, 
                             QPushButton, QLineEdit, QFileDialog, QMessageBox, 
                             QStatusBar)
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
 from PyQt5.QtGui import QFont
 
 # Import dependencies
@@ -47,7 +47,12 @@ class TransactionMatcherWindow(QMainWindow):
         # Initialize the editable table
         self.editable_table = IntegratedEditableTable(self)
         
+        # Initialize settings manager
+        from gui.settings import get_settings_manager
+        self.settings_manager = get_settings_manager()
+        
         self.init_ui()
+        self.load_saved_file_paths()
     
     def init_ui(self):
         """Initialize the user interface"""
@@ -186,27 +191,47 @@ class TransactionMatcherWindow(QMainWindow):
         return export_layout
     
     def create_settings_tab(self):
-        """Create the settings tab"""
-        tab = QWidget()
-        self.tab_widget.addTab(tab, "Settings")
+        """Create the settings tab with zoom controls"""
+        from gui.settings import SettingsTab
         
-        layout = QVBoxLayout(tab)
+        self.settings_tab = SettingsTab(self)
+        self.tab_widget.addTab(self.settings_tab, "Settings")
         
-        # Empty placeholder
-        placeholder = QLabel("Settings will be added later")
-        placeholder.setAlignment(Qt.AlignCenter)
-        placeholder.setFont(QFont("Arial", 12))
-        layout.addWidget(placeholder)
+        # Connect settings signals
+        self.settings_tab.settings_applied.connect(self.on_settings_applied)
+        self.settings_tab.settings_reset.connect(self.on_settings_reset)
+    
+    def load_saved_file_paths(self):
+        """Load saved file paths from settings"""
+        if self.settings_manager.get_setting('files.remember_file_paths', True):
+            saved_fee_file = self.settings_manager.get_setting('files.last_fee_file', '')
+            saved_trans_file = self.settings_manager.get_setting('files.last_transaction_file', '')
+            
+            if saved_fee_file and os.path.exists(saved_fee_file):
+                self.fee_file_path = saved_fee_file
+                self.fee_file_input.setText(saved_fee_file)
+            
+            if saved_trans_file and os.path.exists(saved_trans_file):
+                self.transaction_file_path = saved_trans_file
+                self.transaction_file_input.setText(saved_trans_file)
     
     def on_fee_file_changed(self, text):
         """Handle fee file path changes"""
         self.fee_file_path = text.strip()
         self.check_files_ready()
+        
+        # Save to settings if remember is enabled
+        if self.settings_manager.get_setting('files.remember_file_paths', True):
+            self.settings_manager.set_last_fee_file(self.fee_file_path)
     
     def on_transaction_file_changed(self, text):
         """Handle transaction file path changes"""
         self.transaction_file_path = text.strip()
         self.check_files_ready()
+        
+        # Save to settings if remember is enabled
+        if self.settings_manager.get_setting('files.remember_file_paths', True):
+            self.settings_manager.set_last_transaction_file(self.transaction_file_path)
     
     def browse_fee_file(self):
         """Browse for fee record file"""
@@ -239,6 +264,11 @@ class TransactionMatcherWindow(QMainWindow):
         
         if fee_ready and trans_ready:
             self.status_bar.showMessage("Files ready - click 'Process Files' to begin")
+            
+            # Auto-process if enabled in settings
+            if hasattr(self, 'settings_tab') and self.settings_tab.should_auto_process():
+                QTimer.singleShot(500, self.process_files)  # Small delay for UI responsiveness
+                
         elif not fee_ready and not trans_ready:
             self.status_bar.showMessage("Please select both fee record and transaction files")
         elif not fee_ready:
@@ -340,10 +370,35 @@ class TransactionMatcherWindow(QMainWindow):
         """Save detailed report"""
         from gui.session_manager import save_detailed_report
         save_detailed_report(self.editable_table, self.summary_label.text(), self)
+    
+    def on_settings_applied(self):
+        """Handle settings being applied"""
+        self.status_bar.showMessage("Settings applied successfully", 3000)
+        # Reload any settings that affect the main window
+        self.load_saved_file_paths()
+    
+    def on_settings_reset(self):
+        """Handle settings being reset"""
+        self.status_bar.showMessage("Settings reset to defaults", 3000)
+        self.load_saved_file_paths()
+    
+    def closeEvent(self, event):
+        """Handle window close event"""
+        # Save settings before closing
+        self.settings_manager.save_settings()
+        
+        # Clean up zoom system
+        try:
+            from gui.settings import cleanup_zoom_system_complete
+            cleanup_zoom_system_complete()
+        except:
+            pass
+        
+        event.accept()
 
 
 def run_gui_application():
-    """Run the GUI application"""
+    """Run the GUI application with consolidated zoom system"""
     app = QApplication(sys.argv)
     
     # Set application properties
@@ -354,23 +409,32 @@ def run_gui_application():
     window = TransactionMatcherWindow()
     window.show()
     
-    # ADD THESE LINES FOR ZOOM FUNCTIONALITY:
+    # Initialize consolidated zoom system
     try:
-        from gui.zoom import initialize_zoom_system, add_zoom_buttons_to_main_window
-        from PyQt5.QtCore import QTimer
+        from gui.settings import initialize_zoom_system_complete
         
-        # Initialize zoom system
-        print("Initializing zoom system...")
-        initialize_zoom_system()
+        print("Initializing consolidated zoom system...")
         
-        # Add zoom buttons after a short delay
-        def add_buttons():
-            print("Adding zoom buttons...")
-            add_zoom_buttons_to_main_window()
+        # Initialize zoom system immediately after window is shown
+        zoom_init_success = initialize_zoom_system_complete()
         
-        QTimer.singleShot(1000, add_buttons)  # 1 second delay
-        
+        if zoom_init_success:
+            print("✓ Zoom system ready! Use Ctrl++/Ctrl+-/Ctrl+0 or go to Settings tab")
+        else:
+            print("⚠ Zoom system initialization failed")
+            
     except Exception as e:
-        print(f"Warning: Could not add zoom functionality: {e}")
+        print(f"Warning: Could not initialize zoom system: {e}")
+        print("Application will continue without zoom functionality")
     
-    sys.exit(app.exec_())
+    # Start the application
+    try:
+        sys.exit(app.exec_())
+    except SystemExit:
+        # Clean up zoom system on exit
+        try:
+            from gui.settings import cleanup_zoom_system_complete
+            cleanup_zoom_system_complete()
+        except:
+            pass
+        raise

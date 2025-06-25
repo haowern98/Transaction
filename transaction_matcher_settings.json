@@ -1,0 +1,34 @@
+{
+  "zoom": {
+    "current_level": 100,
+    "available_levels": [
+      50,
+      75,
+      90,
+      100,
+      125,
+      150,
+      175,
+      200,
+      250,
+      300
+    ],
+    "controls_scale_with_zoom": false,
+    "remember_zoom_level": true
+  },
+  "files": {
+    "last_fee_file": "",
+    "last_transaction_file": "",
+    "remember_file_paths": true
+  },
+  "ui": {
+    "theme": "default",
+    "show_tooltips": true,
+    "auto_save_sessions": false
+  },
+  "processing": {
+    "parent_match_threshold": 70,
+    "child_match_threshold": 70,
+    "auto_process_on_file_select": false
+  }
+}
