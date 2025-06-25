@@ -1,12 +1,12 @@
 """
-General settings panel with VS Code-like layout
-Contains zoom controls and other general application settings
-REMOVED: Application Preferences section per user request
+General settings panel with VS Code-style layout matching the provided image
+Contains main title, subtitle, and organized sections like Auto Mode Timeout
+File: src/gui/settings/general_settings.py
 """
 
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                             QPushButton, QComboBox, QCheckBox, QFrame, 
-                            QSizePolicy, QSpacerItem, QGroupBox)
+                            QSizePolicy, QSpacerItem, QGroupBox, QGridLayout)
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QFont
 
@@ -14,7 +14,7 @@ from PyQt5.QtGui import QFont
 class GeneralSettingsPanel(QWidget):
     """
     General settings panel with VS Code-style layout
-    Only includes zoom controls - Application Preferences section removed
+    Matches the structure shown in the provided image
     """
     
     # Signals
@@ -36,162 +36,195 @@ class GeneralSettingsPanel(QWidget):
         self.load_settings()
     
     def setup_ui(self):
-        """Setup the zoom-only general settings UI"""
+        """Setup the VS Code-style general settings UI"""
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(20, 20, 20, 20)
-        main_layout.setSpacing(20)
+        main_layout.setContentsMargins(24, 24, 24, 24)
+        main_layout.setSpacing(0)
         
-        # Zoom section only - no title or subtitle
+        # Header section
+        header_section = self._create_header_section()
+        main_layout.addWidget(header_section)
+        
+        # Add spacing after header
+        main_layout.addSpacing(40)
+        
+        # Zoom section only (in a box)
         zoom_section = self._create_zoom_section()
         main_layout.addWidget(zoom_section)
         
         # Add flexible space at bottom
         main_layout.addStretch()
     
+    def _create_header_section(self):
+        """Create the main header section like in VS Code"""
+        header_widget = QWidget()
+        header_layout = QVBoxLayout(header_widget)
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(4)
+        
+        # Main title - BOLD and consistent with app
+        title_label = QLabel("General Settings")
+        title_label.setFont(QFont("Arial", 20, QFont.Bold))  # Bold and Arial like rest of app
+        title_label.setStyleSheet("color: #1f1f1f;")
+        header_layout.addWidget(title_label)
+        
+        # Subtitle - consistent font
+        subtitle_label = QLabel("Configure general application settings")
+        subtitle_label.setFont(QFont("Arial", 11, QFont.Normal))  # Smaller to match box content exactly
+        subtitle_label.setStyleSheet("color: #1f1f1f;")  # Same color as box content
+        header_layout.addWidget(subtitle_label)
+        
+        return header_widget
+    
     def _create_zoom_section(self):
-        """Create the zoom controls section"""
-        # Section container
-        section = QFrame()
-        section.setStyleSheet("""
-            QFrame {
-                background-color: #f8f9fa;
-                border: 1px solid #e1e4e8;
-                border-radius: 6px;
-                padding: 15px;
-            }
-        """)
+        """Create the zoom section exactly like Auto Mode Timeout in your project"""
+        # Use QGroupBox with QGridLayout like your Auto Mode Timeout
+        zoom_group = QGroupBox("Interface Zoom")
+        zoom_layout = QGridLayout(zoom_group)
         
-        layout = QVBoxLayout(section)
-        layout.setSpacing(15)
+        # Row 0: Label and dropdown (like "Auto mode timeout:")
+        zoom_layout.addWidget(QLabel("Interface zoom:"), 0, 0)
         
-        # Section title
-        zoom_title = QLabel("Zoom")
-        zoom_title.setFont(QFont("Segoe UI", 12, QFont.Bold))
-        zoom_title.setStyleSheet("color: #24292e; margin-bottom: 5px;")
-        layout.addWidget(zoom_title)
-        
-        # Zoom controls row
-        zoom_controls_layout = QHBoxLayout()
-        zoom_controls_layout.setSpacing(10)
-        
-        # Zoom out button
-        self.zoom_out_btn = QPushButton("−")
-        self.zoom_out_btn.setFixedSize(32, 28)
-        self.zoom_out_btn.setStyleSheet(self._get_zoom_button_style())
-        self.zoom_out_btn.setToolTip("Decrease zoom level")
-        zoom_controls_layout.addWidget(self.zoom_out_btn)
+        # Create horizontal layout for zoom controls
+        zoom_controls = QWidget()
+        controls_layout = QHBoxLayout(zoom_controls)
+        controls_layout.setContentsMargins(0, 0, 0, 0)
+        controls_layout.setSpacing(4)
         
         # Zoom level dropdown
         self.zoom_combo = QComboBox()
-        self.zoom_combo.setFixedWidth(80)
+        self.zoom_combo.setFixedWidth(120)
         self.zoom_combo.addItems([f"{level}%" for level in [50, 75, 90, 100, 110, 125, 150, 175, 200]])
         self.zoom_combo.setCurrentText("100%")
-        self.zoom_combo.setStyleSheet(self._get_combo_style())
-        zoom_controls_layout.addWidget(self.zoom_combo)
+        self.zoom_combo.setStyleSheet(self._get_primary_combo_style())
+        controls_layout.addWidget(self.zoom_combo)
         
-        # Zoom in button
+        # Zoom adjustment buttons
+        self.zoom_out_btn = QPushButton("−")
+        self.zoom_out_btn.setFixedSize(28, 28)
+        self.zoom_out_btn.setStyleSheet(self._get_secondary_button_style())
+        self.zoom_out_btn.setToolTip("Decrease zoom level")
+        controls_layout.addWidget(self.zoom_out_btn)
+        
         self.zoom_in_btn = QPushButton("+")
-        self.zoom_in_btn.setFixedSize(32, 28)
-        self.zoom_in_btn.setStyleSheet(self._get_zoom_button_style())
+        self.zoom_in_btn.setFixedSize(28, 28)
+        self.zoom_in_btn.setStyleSheet(self._get_secondary_button_style())
         self.zoom_in_btn.setToolTip("Increase zoom level")
-        zoom_controls_layout.addWidget(self.zoom_in_btn)
+        controls_layout.addWidget(self.zoom_in_btn)
         
-        # Reset zoom button
+        # Reset button
         self.reset_zoom_btn = QPushButton("Reset")
-        self.reset_zoom_btn.setFixedSize(50, 28)
-        self.reset_zoom_btn.setStyleSheet(self._get_reset_button_style())
+        self.reset_zoom_btn.setFixedSize(60, 28)
+        self.reset_zoom_btn.setStyleSheet(self._get_tertiary_button_style())
         self.reset_zoom_btn.setToolTip("Reset zoom to 100%")
-        zoom_controls_layout.addWidget(self.reset_zoom_btn)
+        controls_layout.addWidget(self.reset_zoom_btn)
         
-        zoom_controls_layout.addStretch()
-        layout.addLayout(zoom_controls_layout)
+        # Add stretch to left-align controls
+        controls_layout.addStretch()
         
-        # Zoom description
-        zoom_desc = QLabel("Adjust the interface size for better readability. " +
-                          "Use keyboard shortcuts Ctrl+Plus/Minus or the controls above.")
-        zoom_desc.setFont(QFont("Segoe UI", 8))
-        zoom_desc.setStyleSheet("color: #6a737d; margin-top: 5px;")
-        zoom_desc.setWordWrap(True)
-        layout.addWidget(zoom_desc)
+        zoom_layout.addWidget(zoom_controls, 0, 1)
         
-        # Remember zoom setting
+        # Row 1: Help text spanning both columns (like your timeout help)
+        zoom_help = QLabel("Interface scaling for better readability. Use keyboard shortcuts Ctrl+Plus/Minus or controls above.")
+        zoom_help.setStyleSheet("color: gray;")  # Remove fixed font-size to allow zoom scaling
+        zoom_help.setWordWrap(True)
+        zoom_layout.addWidget(zoom_help, 1, 0, 1, 2)
+        
+        # Row 2: Remember zoom checkbox
         self.remember_zoom_cb = QCheckBox("Remember zoom level between sessions")
-        self.remember_zoom_cb.setFont(QFont("Segoe UI", 9))
-        self.remember_zoom_cb.setStyleSheet("color: #24292e; margin-top: 8px;")
-        self.remember_zoom_cb.setChecked(True)
-        layout.addWidget(self.remember_zoom_cb)
+        zoom_layout.addWidget(self.remember_zoom_cb, 2, 0, 1, 2)
         
-        return section
+        return zoom_group
     
-    def _get_zoom_button_style(self):
-        """Get zoom button stylesheet"""
-        return """
-            QPushButton {
-                font-weight: bold;
-                font-size: 14px;
-                border: 1px solid #d0d7de;
-                border-radius: 6px;
-                background-color: #f6f8fa;
-                color: #24292e;
-            }
-            QPushButton:hover {
-                background-color: #f3f4f6;
-                border-color: #afb8c1;
-            }
-            QPushButton:pressed {
-                background-color: #edeff2;
-                border-color: #8c959f;
-            }
-            QPushButton:disabled {
-                color: #8c959f;
-                background-color: #f6f8fa;
-                border-color: #d0d7de;
-            }
-        """
-    
-    def _get_reset_button_style(self):
-        """Get reset button stylesheet"""
-        return """
-            QPushButton {
-                font-size: 9px;
-                font-weight: 500;
-                border: 1px solid #d0d7de;
-                border-radius: 6px;
-                background-color: #f6f8fa;
-                color: #656d76;
-            }
-            QPushButton:hover {
-                background-color: #f3f4f6;
-                border-color: #afb8c1;
-                color: #24292e;
-            }
-        """
-    
-    def _get_combo_style(self):
-        """Get combobox stylesheet"""
+    def _get_primary_combo_style(self):
+        """Get primary combobox stylesheet (like the dropdown in image)"""
         return """
             QComboBox {
-                font-size: 9px;
-                border: 1px solid #d0d7de;
-                border-radius: 6px;
+                font-family: "Arial";
+                font-size: 13px;
+                font-weight: 400;
+                border: 1px solid #cccccc;
+                border-radius: 2px;
                 background-color: #ffffff;
-                color: #24292e;
+                color: #1f1f1f;
                 padding: 4px 8px;
+                min-height: 22px;
             }
             QComboBox:hover {
-                border-color: #afb8c1;
+                border-color: #0078d4;
+            }
+            QComboBox:focus {
+                border-color: #0078d4;
+                outline: none;
             }
             QComboBox::drop-down {
                 border: none;
                 background: transparent;
+                width: 20px;
             }
             QComboBox::down-arrow {
                 image: none;
                 border-style: solid;
                 border-width: 4px 3px 0 3px;
-                border-color: #656d76 transparent transparent transparent;
+                border-color: #666666 transparent transparent transparent;
                 width: 0px;
                 height: 0px;
+                margin-right: 8px;
+            }
+            QComboBox QAbstractItemView {
+                border: 1px solid #cccccc;
+                background-color: #ffffff;
+                selection-background-color: #e5f3ff;
+                selection-color: #1f1f1f;
+            }
+        """
+    
+    def _get_secondary_button_style(self):
+        """Get secondary button stylesheet for zoom +/- buttons"""
+        return """
+            QPushButton {
+                font-family: "Arial";
+                font-size: 14px;
+                font-weight: 500;
+                border: 1px solid #cccccc;
+                border-radius: 2px;
+                background-color: #f3f3f3;
+                color: #1f1f1f;
+            }
+            QPushButton:hover {
+                background-color: #e5f3ff;
+                border-color: #0078d4;
+            }
+            QPushButton:pressed {
+                background-color: #cce7ff;
+                border-color: #005a9e;
+            }
+            QPushButton:disabled {
+                color: #a6a6a6;
+                background-color: #f3f3f3;
+                border-color: #cccccc;
+            }
+        """
+    
+    def _get_tertiary_button_style(self):
+        """Get tertiary button stylesheet for reset button"""
+        return """
+            QPushButton {
+                font-family: "Arial";
+                font-size: 13px;
+                font-weight: 400;
+                border: 1px solid #cccccc;
+                border-radius: 2px;
+                background-color: #ffffff;
+                color: #616161;
+            }
+            QPushButton:hover {
+                background-color: #f3f3f3;
+                color: #1f1f1f;
+                border-color: #0078d4;
+            }
+            QPushButton:pressed {
+                background-color: #e5e5e5;
             }
         """
     
@@ -204,7 +237,7 @@ class GeneralSettingsPanel(QWidget):
             self.reset_zoom_btn.clicked.connect(self.reset_zoom)
             self.zoom_combo.currentTextChanged.connect(self.on_zoom_combo_changed)
             
-            # Settings
+            # Settings checkboxes
             self.remember_zoom_cb.toggled.connect(
                 lambda checked: self.setting_changed.emit('remember_zoom', checked)
             )
@@ -225,8 +258,8 @@ class GeneralSettingsPanel(QWidget):
                 self.zoom_combo.setCurrentText(f"{zoom_level}%")
                 self.update_zoom_button_states()
             
-            # Load remember zoom setting
-            remember_zoom = self.settings_manager.get('ui', 'remember_zoom', True)
+            # Load settings
+            remember_zoom = self.settings_manager.get_setting('ui.remember_zoom', True)
             self.remember_zoom_cb.setChecked(remember_zoom)
             
         except Exception as e:
@@ -235,19 +268,37 @@ class GeneralSettingsPanel(QWidget):
     def zoom_in(self):
         """Increase zoom level"""
         if self.zoom_system:
-            new_level = self.zoom_system.calculate_next_zoom('in')
-            self.zoom_system.set_zoom_level(new_level)
+            current_text = self.zoom_combo.currentText()
+            current_level = int(current_text.replace('%', ''))
+            levels = [50, 75, 90, 100, 110, 125, 150, 175, 200]
+            
+            try:
+                current_index = levels.index(current_level)
+                if current_index < len(levels) - 1:
+                    new_level = levels[current_index + 1]
+                    self.zoom_system.set_zoom_level(new_level)
+            except ValueError:
+                pass
     
     def zoom_out(self):
         """Decrease zoom level"""
         if self.zoom_system:
-            new_level = self.zoom_system.calculate_next_zoom('out')
-            self.zoom_system.set_zoom_level(new_level)
+            current_text = self.zoom_combo.currentText()
+            current_level = int(current_text.replace('%', ''))
+            levels = [50, 75, 90, 100, 110, 125, 150, 175, 200]
+            
+            try:
+                current_index = levels.index(current_level)
+                if current_index > 0:
+                    new_level = levels[current_index - 1]
+                    self.zoom_system.set_zoom_level(new_level)
+            except ValueError:
+                pass
     
     def reset_zoom(self):
         """Reset zoom to 100%"""
         if self.zoom_system:
-            self.zoom_system.reset_zoom()
+            self.zoom_system.set_zoom_level(100)
     
     def on_zoom_combo_changed(self, text):
         """Handle zoom combo box changes"""
@@ -272,8 +323,9 @@ class GeneralSettingsPanel(QWidget):
         if not self.zoom_system:
             return
             
-        current_level = self.zoom_system.get_zoom_level()
-        zoom_levels = self.zoom_system.ZOOM_LEVELS
+        current_text = self.zoom_combo.currentText()
+        current_level = int(current_text.replace('%', ''))
+        levels = [50, 75, 90, 100, 110, 125, 150, 175, 200]
         
-        self.zoom_out_btn.setEnabled(current_level > min(zoom_levels))
-        self.zoom_in_btn.setEnabled(current_level < max(zoom_levels))
+        self.zoom_out_btn.setEnabled(current_level > min(levels))
+        self.zoom_in_btn.setEnabled(current_level < max(levels))

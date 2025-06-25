@@ -142,3 +142,5 @@ reports/
 !sample_*.xlsx
 
 transaction_matcher_settings.json
+
+TransactionMatcher.exe

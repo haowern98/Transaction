@@ -1,6 +1,7 @@
 """
 Complete settings tab with VS Code-style General subtab
 Updated with proper tab sizing to match parent tabs
+File: src/gui/settings/settings_tab.py
 """
 
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTabWidget,
@@ -60,80 +61,47 @@ class SettingsTab(QWidget):
         action_frame = QFrame()
         action_frame.setStyleSheet("""
             QFrame {
-                background-color: #f6f8fa;
-                border-top: 1px solid #d0d7de;
-                padding: 10px;
+                background-color: #ffffff;
+                border: none;
+                padding: 0px;
             }
         """)
-        action_frame.setFixedHeight(50)
+        action_frame.setFixedHeight(80)  # Taller for proper vertical centering
         
         layout = QHBoxLayout(action_frame)
-        layout.setContentsMargins(15, 8, 15, 8)
+        layout.setContentsMargins(20, 20, 20, 20)  # More reasonable margins
         
-        # Status label
-        self.status_label = QLabel("Settings loaded successfully")
-        self.status_label.setFont(QFont("Segoe UI", 8))
-        self.status_label.setStyleSheet("color: #656d76;")
-        layout.addWidget(self.status_label)
-        
+        # Center horizontally
         layout.addStretch()
         
-        # Action buttons
+        # Reset to Defaults button - DEFAULT STYLING
         self.reset_btn = QPushButton("Reset to Defaults")
-        self.reset_btn.setFixedSize(120, 28)
-        self.reset_btn.setStyleSheet(self._get_secondary_button_style())
+        # NO setStyleSheet calls - use default appearance
         self.reset_btn.setToolTip("Reset all settings to default values")
         layout.addWidget(self.reset_btn)
         
+        # Spacing between buttons
+        layout.addSpacing(10)
+        
+        # Save Settings button - DEFAULT STYLING  
         self.save_btn = QPushButton("Save Settings")
-        self.save_btn.setFixedSize(100, 28)
-        self.save_btn.setStyleSheet(self._get_primary_button_style())
+        # NO setStyleSheet calls - use default appearance
         self.save_btn.setToolTip("Save current settings")
         layout.addWidget(self.save_btn)
         
+        # Center horizontally
+        layout.addStretch()
+        
         return action_frame
     
-    def _get_primary_button_style(self):
-        """Get primary button stylesheet"""
+    def _get_file_processing_button_style(self):
+        """Get default QPushButton style - NO custom styling to match File Processing exactly"""
         return """
             QPushButton {
-                font-size: 9px;
-                font-weight: 500;
-                border: 1px solid #1f883d;
-                border-radius: 6px;
-                background-color: #1f883d;
-                color: #ffffff;
-                padding: 6px 16px;
-            }
-            QPushButton:hover {
-                background-color: #1a7f37;
-                border-color: #1a7f37;
-            }
-            QPushButton:pressed {
-                background-color: #166f2c;
-                border-color: #166f2c;
-            }
-        """
-    
-    def _get_secondary_button_style(self):
-        """Get secondary button stylesheet"""
-        return """
-            QPushButton {
-                font-size: 9px;
-                font-weight: 500;
-                border: 1px solid #d0d7de;
-                border-radius: 6px;
-                background-color: #f6f8fa;
-                color: #24292e;
-                padding: 6px 16px;
-            }
-            QPushButton:hover {
-                background-color: #f3f4f6;
-                border-color: #afb8c1;
-            }
-            QPushButton:pressed {
-                background-color: #edeff2;
-                border-color: #8c959f;
+                /* Use default system button styling - minimal changes */
+                font-family: "Arial";
+                border: none;
+                background: none;
             }
         """
     
@@ -150,10 +118,10 @@ class SettingsTab(QWidget):
         
         # Settings manager signals
         self.settings_manager.settings_saved.connect(
-            lambda: self.update_status("Settings saved successfully")
+            lambda: print("✓ Settings saved successfully")
         )
         self.settings_manager.settings_loaded.connect(
-            lambda: self.update_status("Settings loaded successfully")
+            lambda: print("✓ Settings loaded successfully")
         )
     
     def save_settings(self):
@@ -164,13 +132,13 @@ class SettingsTab(QWidget):
             success = self.settings_manager.save_settings()
             
             if success:
-                self.update_status("Settings saved successfully")
+                print("✓ Settings saved successfully")
                 self.settings_applied.emit()
             else:
-                self.update_status("Failed to save settings", error=True)
+                print("✗ Failed to save settings")
                 
         except Exception as e:
-            self.update_status(f"Error saving settings: {e}", error=True)
+            print(f"✗ Error saving settings: {e}")
     
     def reset_all_settings(self):
         """Reset all settings to defaults"""
@@ -184,37 +152,28 @@ class SettingsTab(QWidget):
         )
         
         if reply == QMessageBox.Yes:
-            self.settings_manager.reset_to_defaults()
-            
-            # Reload settings in the general panel
-            if hasattr(self, 'general_panel'):
-                self.general_panel.load_settings()
-            
-            self.update_status("All settings reset to defaults")
-            self.settings_reset.emit()
+            try:
+                self.settings_manager.reset_to_defaults()
+                
+                # Reload settings in the general panel
+                if hasattr(self, 'general_panel'):
+                    self.general_panel.load_settings()
+                
+                print("✓ All settings reset to defaults")
+                self.settings_reset.emit()
+                
+            except Exception as e:
+                print(f"✗ Failed to reset settings: {e}")
     
     def on_zoom_changed(self, zoom_level):
         """Handle zoom level changes"""
-        self.update_status(f"Zoom level changed to {zoom_level}%")
+        print(f"✓ Zoom level changed to {zoom_level}%")
     
     def on_setting_changed(self, setting_key, value):
         """Handle individual setting changes"""
         # Settings are automatically saved by the settings manager
         # This is just for status updates
         pass
-    
-    def update_status(self, message, error=False):
-        """Update status message"""
-        if error:
-            self.status_label.setStyleSheet("color: #cf222e; font-size: 8px;")
-        else:
-            self.status_label.setStyleSheet("color: #656d76; font-size: 8px;")
-        
-        self.status_label.setText(message)
-        
-        # Auto-clear status after 3 seconds
-        from PyQt5.QtCore import QTimer
-        QTimer.singleShot(3000, lambda: self.status_label.setText(""))
     
     def should_auto_process(self):
         """Check if auto-processing is enabled (placeholder)"""
