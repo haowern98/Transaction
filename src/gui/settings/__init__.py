@@ -4,7 +4,7 @@ Provides organized settings management and UI components
 """
 
 from .settings_tab import SettingsTab
-from .general_settings import GeneralSettingsPanel
+from .general_subtab import GeneralSettingsPanel
 from .settings_manager import SettingsManager, get_settings_manager
 
 # Import zoom system from within settings

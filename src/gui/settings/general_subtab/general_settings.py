@@ -1,7 +1,7 @@
 """
 General settings panel with VS Code-style layout matching the provided image
 Contains main title, subtitle, and organized sections like Auto Mode Timeout
-File: src/gui/settings/general_settings.py
+File: src/gui/settings/general_subtab/general_settings.py
 """
 
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
@@ -25,8 +25,8 @@ class GeneralSettingsPanel(QWidget):
         super().__init__(parent)
         
         # Get zoom system and settings
-        from .zoom.zoom_system import get_zoom_system
-        from .settings_manager import get_settings_manager
+        from ..zoom.zoom_system import get_zoom_system
+        from ..settings_manager import get_settings_manager
         
         self.zoom_system = get_zoom_system()
         self.settings_manager = get_settings_manager()

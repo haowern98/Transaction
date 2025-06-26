@@ -52,7 +52,7 @@ class SettingsTab(QWidget):
     
     def _add_general_tab(self):
         """Add the General settings tab"""
-        from .general_settings import GeneralSettingsPanel
+        from .general_subtab.general_settings import GeneralSettingsPanel
         
         self.general_panel = GeneralSettingsPanel()
         self.settings_tabs.addTab(self.general_panel, "General")
@@ -71,26 +71,24 @@ class SettingsTab(QWidget):
         # Center horizontally with stretch (automation project pattern)
         layout.addStretch()
         
-        # Reset to Defaults button - ZOOM RESPONSIVE
+        # Reset to Defaults button - ZOOM RESPONSIVE with default styling
         self.reset_btn = QPushButton("Reset to Defaults")
         # REMOVED: setFixedSize - let button scale naturally with zoom
         self.reset_btn.setMinimumSize(100, 24)  # Minimum size for usability
         self.reset_btn.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
-        # Font will be handled by zoom system - set base font
-        self.reset_btn.setFont(QFont("Arial", 9))  # Base font size
+        # REMOVED: setFont() - use default Qt font like File Processing tab
         self.reset_btn.setToolTip("Reset all settings to default values")
         layout.addWidget(self.reset_btn)
         
         # Spacing between buttons - same as before
         layout.addSpacing(10)
         
-        # Save Settings button - ZOOM RESPONSIVE  
+        # Save Settings button - ZOOM RESPONSIVE with default styling
         self.save_btn = QPushButton("Save Settings")
         # REMOVED: setFixedSize - let button scale naturally with zoom
         self.save_btn.setMinimumSize(90, 24)  # Minimum size for usability
         self.save_btn.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
-        # Font will be handled by zoom system - set base font
-        self.save_btn.setFont(QFont("Arial", 9))  # Base font size
+        # REMOVED: setFont() - use default Qt font like File Processing tab
         self.save_btn.setToolTip("Save current settings")
         layout.addWidget(self.save_btn)
         
