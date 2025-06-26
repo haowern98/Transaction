@@ -60,17 +60,17 @@ class GeneralSettingsPanel(QWidget):
         header_widget = QWidget()
         header_layout = QVBoxLayout(header_widget)
         header_layout.setContentsMargins(0, 0, 0, 0)
-        header_layout.setSpacing(4)
+        header_layout.setSpacing(11)
         
         # Main title - BOLD and consistent with app
         title_label = QLabel("General Settings")
-        title_label.setFont(QFont("Arial", 20, QFont.Bold))  # Bold and Arial like rest of app
+        title_label.setFont(QFont("Tahoma", 12, QFont.Bold))  # Bold and Arial like rest of app
         title_label.setStyleSheet("color: #1f1f1f;")
         header_layout.addWidget(title_label)
         
         # Subtitle - consistent font
         subtitle_label = QLabel("Configure general application settings")
-        subtitle_label.setFont(QFont("Arial", 11, QFont.Normal))  # Smaller to match box content exactly
+        subtitle_label.setFont(QFont("Tahoma", 8, QFont.Normal))  # Smaller to match box content exactly
         subtitle_label.setStyleSheet("color: #1f1f1f;")  # Same color as box content
         header_layout.addWidget(subtitle_label)
         

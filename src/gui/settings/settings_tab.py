@@ -1,6 +1,6 @@
 """
 Complete settings tab with VS Code-style General subtab
-Updated with proper tab sizing to match parent tabs
+Updated with zoom-responsive action buttons
 File: src/gui/settings/settings_tab.py
 """
 
@@ -30,6 +30,7 @@ class SettingsTab(QWidget):
         
         self.setup_ui()
         self.connect_signals()
+        self.register_with_zoom_system()
     
     def setup_ui(self):
         """Setup the complete settings tab UI"""
@@ -45,7 +46,7 @@ class SettingsTab(QWidget):
         # Add only the General tab for now
         self._add_general_tab()
         
-        # Settings action bar at bottom
+        # Settings action bar at bottom - ZOOM RESPONSIVE
         action_bar = self._create_action_bar()
         main_layout.addWidget(action_bar)
     
@@ -57,53 +58,74 @@ class SettingsTab(QWidget):
         self.settings_tabs.addTab(self.general_panel, "General")
     
     def _create_action_bar(self):
-        """Create the bottom action bar"""
-        action_frame = QFrame()
-        action_frame.setStyleSheet("""
-            QFrame {
-                background-color: #ffffff;
-                border: none;
-                padding: 0px;
-            }
-        """)
-        action_frame.setFixedHeight(80)  # Taller for proper vertical centering
+        """Create zoom-responsive bottom action bar"""
+        # Simple widget container - NO styled frame
+        action_widget = QWidget()
+        # REMOVED: setFixedHeight - let it scale with zoom
+        action_widget.setMinimumHeight(60)  # Minimum height for usability
         
-        layout = QHBoxLayout(action_frame)
-        layout.setContentsMargins(20, 20, 20, 20)  # More reasonable margins
+        # Simple horizontal layout - matches automation project pattern
+        layout = QHBoxLayout(action_widget)
+        layout.setContentsMargins(20, 20, 20, 20)  # Same margins as before
         
-        # Center horizontally
+        # Center horizontally with stretch (automation project pattern)
         layout.addStretch()
         
-        # Reset to Defaults button - DEFAULT STYLING
+        # Reset to Defaults button - ZOOM RESPONSIVE
         self.reset_btn = QPushButton("Reset to Defaults")
-        # NO setStyleSheet calls - use default appearance
+        # REMOVED: setFixedSize - let button scale naturally with zoom
+        self.reset_btn.setMinimumSize(100, 24)  # Minimum size for usability
+        self.reset_btn.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+        # Font will be handled by zoom system - set base font
+        self.reset_btn.setFont(QFont("Arial", 9))  # Base font size
         self.reset_btn.setToolTip("Reset all settings to default values")
         layout.addWidget(self.reset_btn)
         
-        # Spacing between buttons
+        # Spacing between buttons - same as before
         layout.addSpacing(10)
         
-        # Save Settings button - DEFAULT STYLING  
+        # Save Settings button - ZOOM RESPONSIVE  
         self.save_btn = QPushButton("Save Settings")
-        # NO setStyleSheet calls - use default appearance
+        # REMOVED: setFixedSize - let button scale naturally with zoom
+        self.save_btn.setMinimumSize(90, 24)  # Minimum size for usability
+        self.save_btn.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+        # Font will be handled by zoom system - set base font
+        self.save_btn.setFont(QFont("Arial", 9))  # Base font size
         self.save_btn.setToolTip("Save current settings")
         layout.addWidget(self.save_btn)
         
-        # Center horizontally
+        # Center horizontally with stretch (automation project pattern)
         layout.addStretch()
         
-        return action_frame
+        # NO background styling - inherits natural window background
+        # This removes the white box effect while keeping everything else the same
+        
+        return action_widget
     
-    def _get_file_processing_button_style(self):
-        """Get default QPushButton style - NO custom styling to match File Processing exactly"""
-        return """
-            QPushButton {
-                /* Use default system button styling - minimal changes */
-                font-family: "Arial";
-                border: none;
-                background: none;
-            }
-        """
+    def register_with_zoom_system(self):
+        """Register action buttons with zoom system for proper scaling"""
+        try:
+            from .zoom.zoom_system import get_zoom_system
+            
+            zoom_system = get_zoom_system()
+            if zoom_system:
+                # Register the action buttons with zoom system
+                zoom_system.register_widget(self.reset_btn)
+                zoom_system.register_widget(self.save_btn)
+                
+                # Also register the action widget container
+                zoom_system.register_widget(self.action_widget if hasattr(self, 'action_widget') else None)
+                
+        except Exception as e:
+            print(f"Warning: Could not register settings buttons with zoom system: {e}")
+    
+    def showEvent(self, event):
+        """Handle show event - register widgets when shown"""
+        super().showEvent(event)
+        
+        # Ensure buttons are registered with zoom system when tab becomes visible
+        if hasattr(self, 'reset_btn') and hasattr(self, 'save_btn'):
+            self.register_with_zoom_system()
     
     def connect_signals(self):
         """Connect all widget signals"""
@@ -168,6 +190,9 @@ class SettingsTab(QWidget):
     def on_zoom_changed(self, zoom_level):
         """Handle zoom level changes"""
         print(f"✓ Zoom level changed to {zoom_level}%")
+        
+        # Re-register buttons with zoom system when zoom changes
+        self.register_with_zoom_system()
     
     def on_setting_changed(self, setting_key, value):
         """Handle individual setting changes"""
@@ -182,8 +207,3 @@ class SettingsTab(QWidget):
     def get_processing_thresholds(self):
         """Get processing thresholds (placeholder)"""
         return {'parent_threshold': 70, 'child_threshold': 70}
-    
-    def showEvent(self, event):
-        """Handle show event"""
-        super().showEvent(event)
-        # Settings are loaded automatically by the general panel
