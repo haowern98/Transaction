@@ -64,14 +64,14 @@ class GeneralSettingsPanel(QWidget):
         
         # Main title - BOLD and consistent with app
         title_label = QLabel("General Settings")
-        title_label.setFont(QFont("Tahoma", 12, QFont.Bold))  # Bold and Arial like rest of app
+        title_label.setFont(QFont("Tahoma", 12, QFont.Bold))  
         title_label.setStyleSheet("color: #1f1f1f;")
         header_layout.addWidget(title_label)
         
         # Subtitle - consistent font
         subtitle_label = QLabel("Configure general application settings")
-        subtitle_label.setFont(QFont("Tahoma", 8, QFont.Normal))  # Smaller to match box content exactly
-        subtitle_label.setStyleSheet("color: #1f1f1f;")  # Same color as box content
+        subtitle_label.setFont(QFont("Tahoma", 8, QFont.Normal)) 
+        subtitle_label.setStyleSheet("color: #1f1f1f;")  
         header_layout.addWidget(subtitle_label)
         
         return header_widget
