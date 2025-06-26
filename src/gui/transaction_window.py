@@ -104,7 +104,7 @@ class TransactionMatcherWindow(QMainWindow):
         
         # Fee Record File row
         fee_layout = QHBoxLayout()
-        fee_layout.addWidget(QLabel("Fee Record File:"))
+        fee_layout.addWidget(QLabel("Parent-Student Pair File:"))
         self.fee_file_input = QLineEdit()
         self.fee_file_input.setText(self.fee_file_path)
         self.fee_file_input.setPlaceholderText("Select the Excel file containing parent-student records...")
