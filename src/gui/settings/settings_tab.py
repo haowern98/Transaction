@@ -1,19 +1,20 @@
 """
 Complete settings tab with VS Code-style General subtab and new File Paths subtab
-Updated with zoom-responsive action buttons
+Fixed zoom layout issues to prevent bottom action bar from being cut off
 File: src/gui/settings/settings_tab.py
 """
 
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTabWidget,
                             QLabel, QPushButton, QMessageBox, QFileDialog, 
-                            QFrame, QSizePolicy)
-from PyQt5.QtCore import Qt, pyqtSignal
+                            QFrame, QSizePolicy, QScrollArea)
+from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 from PyQt5.QtGui import QFont
 
 
 class SettingsTab(QWidget):
     """
     Complete settings tab with VS Code-style General subtab and File Paths subtab
+    Fixed to handle zoom changes properly without cutting off bottom action bar
     """
     
     # Signals
@@ -28,17 +29,23 @@ class SettingsTab(QWidget):
         
         self.settings_manager = get_settings_manager()
         
+        # Layout refresh timer for zoom changes
+        self.layout_refresh_timer = QTimer()
+        self.layout_refresh_timer.setSingleShot(True)
+        self.layout_refresh_timer.timeout.connect(self._refresh_layout)
+        
         self.setup_ui()
         self.connect_signals()
         self.register_with_zoom_system()
     
     def setup_ui(self):
-        """Setup the complete settings tab UI"""
+        """Setup the complete settings tab UI with scroll areas in individual subtabs"""
+        # Main layout - NO scroll area at this level
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
         
-        # Create settings content area with tabs
+        # Create settings content area with tabs - ALWAYS VISIBLE
         self.settings_tabs = QTabWidget()
         # NO CUSTOM STYLING - use default Qt styling to match main tabs
         main_layout.addWidget(self.settings_tabs)
@@ -49,9 +56,13 @@ class SettingsTab(QWidget):
         # Add File Paths tab
         self._add_file_paths_tab()
         
-        # Settings action bar at bottom - ZOOM RESPONSIVE
+        # Settings action bar at bottom - ALWAYS VISIBLE AND FIXED
         action_bar = self._create_action_bar()
         main_layout.addWidget(action_bar)
+        
+        # Ensure proper size policies
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.settings_tabs.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
     
     def _add_general_tab(self):
         """Add the General settings tab"""
@@ -76,45 +87,37 @@ class SettingsTab(QWidget):
             self.settings_tabs.addTab(placeholder, "File Paths")
     
     def _create_action_bar(self):
-        """Create zoom-responsive bottom action bar"""
-        # Simple widget container - NO styled frame
+        """Create zoom-responsive bottom action bar with proper scaling"""
+        # Action bar container - let it scale naturally with zoom
         action_widget = QWidget()
-        # REMOVED: setFixedHeight - let it scale with zoom
-        action_widget.setMinimumHeight(60)  # Minimum height for usability
+        action_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         
-        # Simple horizontal layout - matches automation project pattern
+        # Main action layout with flexible margins
         layout = QHBoxLayout(action_widget)
-        layout.setContentsMargins(20, 20, 20, 20)  # Same margins as before
+        layout.setContentsMargins(20, 15, 20, 15)  # Reduced margins
         
-        # Center horizontally with stretch (automation project pattern)
+        # Center horizontally with stretch
         layout.addStretch()
         
-        # Reset to Defaults button - ZOOM RESPONSIVE with default styling
+        # Reset to Defaults button - NO SIZE RESTRICTIONS for proper zoom scaling
         self.reset_btn = QPushButton("Reset to Defaults")
-        # REMOVED: setFixedSize - let button scale naturally with zoom
-        self.reset_btn.setMinimumSize(100, 24)  # Minimum size for usability
+        # Remove all size restrictions to allow natural zoom scaling
         self.reset_btn.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
-        # REMOVED: setFont() - use default Qt font like File Processing tab
         self.reset_btn.setToolTip("Reset all settings to default values")
         layout.addWidget(self.reset_btn)
         
-        # Spacing between buttons - same as before
+        # Spacing between buttons
         layout.addSpacing(10)
         
-        # Save Settings button - ZOOM RESPONSIVE with default styling
+        # Save Settings button - NO SIZE RESTRICTIONS for proper zoom scaling  
         self.save_btn = QPushButton("Save Settings")
-        # REMOVED: setFixedSize - let button scale naturally with zoom
-        self.save_btn.setMinimumSize(90, 24)  # Minimum size for usability
+        # Remove all size restrictions to allow natural zoom scaling
         self.save_btn.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
-        # REMOVED: setFont() - use default Qt font like File Processing tab
         self.save_btn.setToolTip("Save current settings")
         layout.addWidget(self.save_btn)
         
-        # Center horizontally with stretch (automation project pattern)
+        # Center horizontally with stretch
         layout.addStretch()
-        
-        # NO background styling - inherits natural window background
-        # This removes the white box effect while keeping everything else the same
         
         return action_widget
     
@@ -129,11 +132,38 @@ class SettingsTab(QWidget):
                 zoom_system.register_widget(self.reset_btn)
                 zoom_system.register_widget(self.save_btn)
                 
-                # Also register the action widget container
-                zoom_system.register_widget(self.action_widget if hasattr(self, 'action_widget') else None)
+                # Connect to zoom changes for layout refresh
+                zoom_system.zoom_changed.connect(self._on_zoom_changed)
+                
+                print("✓ Settings tab buttons registered with zoom system")
                 
         except Exception as e:
             print(f"Warning: Could not register settings buttons with zoom system: {e}")
+    
+    def _on_zoom_changed(self, zoom_level):
+        """Handle zoom level changes with layout refresh"""
+        print(f"Settings tab: Zoom changed to {zoom_level}%")
+        
+        # Trigger layout refresh after a short delay
+        self.layout_refresh_timer.start(100)  # 100ms delay
+    
+    def _refresh_layout(self):
+        """Refresh layout after zoom changes"""
+        try:
+            # Force layout update
+            self.updateGeometry()
+            
+            # Update all child widgets
+            for child in self.findChildren(QWidget):
+                child.updateGeometry()
+            
+            # Force repaint
+            self.update()
+            
+            print("✓ Settings tab layout refreshed")
+            
+        except Exception as e:
+            print(f"Warning: Layout refresh failed: {e}")
     
     def showEvent(self, event):
         """Handle show event - register widgets when shown"""
@@ -142,6 +172,14 @@ class SettingsTab(QWidget):
         # Ensure buttons are registered with zoom system when tab becomes visible
         if hasattr(self, 'reset_btn') and hasattr(self, 'save_btn'):
             self.register_with_zoom_system()
+    
+    def resizeEvent(self, event):
+        """Handle resize events to maintain proper layout"""
+        super().resizeEvent(event)
+        
+        # Trigger layout refresh on resize
+        if hasattr(self, 'layout_refresh_timer'):
+            self.layout_refresh_timer.start(50)  # Short delay for resize
     
     def connect_signals(self):
         """Connect all widget signals"""
@@ -154,7 +192,7 @@ class SettingsTab(QWidget):
             self.general_panel.zoom_changed.connect(self.on_zoom_changed)
             self.general_panel.setting_changed.connect(self.on_setting_changed)
         
-        # File paths panel signals (for future implementation)
+        # File paths panel signals
         if hasattr(self, 'file_paths_panel'):
             self.file_paths_panel.file_path_changed.connect(self.on_file_path_changed)
             self.file_paths_panel.setting_changed.connect(self.on_setting_changed)
@@ -208,15 +246,21 @@ class SettingsTab(QWidget):
                 print("✓ All settings reset to defaults")
                 self.settings_reset.emit()
                 
+                # Refresh layout after reset
+                self._refresh_layout()
+                
             except Exception as e:
                 print(f"✗ Failed to reset settings: {e}")
     
     def on_zoom_changed(self, zoom_level):
-        """Handle zoom level changes"""
-        print(f"✓ Zoom level changed to {zoom_level}%")
+        """Handle zoom level changes from child panels"""
+        print(f"✓ Settings tab: Zoom level changed to {zoom_level}%")
         
         # Re-register buttons with zoom system when zoom changes
         self.register_with_zoom_system()
+        
+        # Trigger layout refresh
+        self._refresh_layout()
     
     def on_setting_changed(self, setting_key, value):
         """Handle individual setting changes"""
@@ -225,8 +269,8 @@ class SettingsTab(QWidget):
         pass
     
     def on_file_path_changed(self, path_type, new_path):
-        """Handle file path changes (for future implementation)"""
-        # Placeholder for future file path change handling
+        """Handle file path changes"""
+        # File path changes are handled by the file paths panel
         print(f"File path changed: {path_type} = {new_path}")
     
     def should_auto_process(self):
@@ -236,3 +280,15 @@ class SettingsTab(QWidget):
     def get_processing_thresholds(self):
         """Get processing thresholds (placeholder)"""
         return {'parent_threshold': 70, 'child_threshold': 70}
+    
+    def force_layout_update(self):
+        """Force complete layout update - useful for external calls"""
+        self._refresh_layout()
+    
+    def cleanup(self):
+        """Clean up resources"""
+        try:
+            if hasattr(self, 'layout_refresh_timer'):
+                self.layout_refresh_timer.stop()
+        except:
+            pass

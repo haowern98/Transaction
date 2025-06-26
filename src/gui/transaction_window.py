@@ -1,6 +1,7 @@
 """
 Main window for the Transaction Matcher GUI application
-Handles the primary user interface and file processing coordination
+Updated to remove the Parent-Student Pair File field from File Processing tab
+File: src/gui/transaction_window.py
 """
 import sys
 import os
@@ -84,7 +85,7 @@ class TransactionMatcherWindow(QMainWindow):
         
         layout = QVBoxLayout(tab)
         
-        # File Selection Group
+        # File Selection Group (only Transaction File now)
         layout.addWidget(self._create_file_selection_group())
         
         # Check if default files are ready on startup
@@ -98,22 +99,9 @@ class TransactionMatcherWindow(QMainWindow):
         layout.setStretchFactor(layout.itemAt(1).widget(), 1)  # Results
     
     def _create_file_selection_group(self):
-        """Create the file selection group box"""
+        """Create the file selection group box with only Transaction File"""
         file_group = QGroupBox("File Selection")
         file_layout = QVBoxLayout(file_group)
-        
-        # Fee Record File row
-        fee_layout = QHBoxLayout()
-        fee_layout.addWidget(QLabel("Parent-Student Pair File:"))
-        self.fee_file_input = QLineEdit()
-        self.fee_file_input.setText(self.fee_file_path)
-        self.fee_file_input.setPlaceholderText("Select the Excel file containing parent-student records...")
-        self.fee_file_input.textChanged.connect(self.on_fee_file_changed)
-        fee_layout.addWidget(self.fee_file_input)
-        self.fee_browse_btn = QPushButton("Browse...")
-        self.fee_browse_btn.clicked.connect(self.browse_fee_file)
-        fee_layout.addWidget(self.fee_browse_btn)
-        file_layout.addLayout(fee_layout)
         
         # Transaction File row
         trans_layout = QHBoxLayout()
@@ -150,7 +138,7 @@ class TransactionMatcherWindow(QMainWindow):
         results_layout = QVBoxLayout(results_group)
         
         # Summary row
-        self.summary_label = QLabel("No results yet. Select files and click 'Process Files' to begin.")
+        self.summary_label = QLabel("No results yet. Select transaction file and click 'Process Files' to begin.")
         self.summary_label.setFont(QFont("Arial", 9))
         results_layout.addWidget(self.summary_label)
         
@@ -201,28 +189,39 @@ class TransactionMatcherWindow(QMainWindow):
         self.settings_tab.settings_applied.connect(self.on_settings_applied)
         self.settings_tab.settings_reset.connect(self.on_settings_reset)
     
+    def get_fee_file_path_from_settings(self):
+        """Get fee file path from Settings tab"""
+        try:
+            if hasattr(self.settings_tab, 'file_paths_panel'):
+                fee_path = self.settings_tab.file_paths_panel.get_fee_record_file_path()
+                if fee_path and os.path.exists(fee_path):
+                    return fee_path
+            
+            # Fallback to settings manager
+            saved_fee_file = self.settings_manager.get_setting('files.last_fee_file', '')
+            if saved_fee_file and os.path.exists(saved_fee_file):
+                return saved_fee_file
+                
+            # Final fallback to default
+            return self.fee_file_path
+            
+        except Exception as e:
+            print(f"Warning: Could not get fee file from settings: {e}")
+            return self.fee_file_path
+    
     def load_saved_file_paths(self):
         """Load saved file paths from settings"""
         if self.settings_manager.get_setting('files.remember_file_paths', True):
+            # Load fee file from settings
             saved_fee_file = self.settings_manager.get_setting('files.last_fee_file', '')
-            saved_trans_file = self.settings_manager.get_setting('files.last_transaction_file', '')
-            
             if saved_fee_file and os.path.exists(saved_fee_file):
                 self.fee_file_path = saved_fee_file
-                self.fee_file_input.setText(saved_fee_file)
             
+            # Load transaction file from settings
+            saved_trans_file = self.settings_manager.get_setting('files.last_transaction_file', '')
             if saved_trans_file and os.path.exists(saved_trans_file):
                 self.transaction_file_path = saved_trans_file
                 self.transaction_file_input.setText(saved_trans_file)
-    
-    def on_fee_file_changed(self, text):
-        """Handle fee file path changes"""
-        self.fee_file_path = text.strip()
-        self.check_files_ready()
-        
-        # Save to settings if remember is enabled
-        if self.settings_manager.get_setting('files.remember_file_paths', True):
-            self.settings_manager.set_last_fee_file(self.fee_file_path)
     
     def on_transaction_file_changed(self, text):
         """Handle transaction file path changes"""
@@ -232,17 +231,6 @@ class TransactionMatcherWindow(QMainWindow):
         # Save to settings if remember is enabled
         if self.settings_manager.get_setting('files.remember_file_paths', True):
             self.settings_manager.set_last_transaction_file(self.transaction_file_path)
-    
-    def browse_fee_file(self):
-        """Browse for fee record file"""
-        file_path, _ = QFileDialog.getOpenFileName(
-            self, 
-            "Select Fee Record File", 
-            "", 
-            "Excel Files (*.xlsx *.xls);;All Files (*)"
-        )
-        if file_path:
-            self.fee_file_input.setText(file_path)
     
     def browse_transaction_file(self):
         """Browse for transaction file"""
@@ -257,7 +245,10 @@ class TransactionMatcherWindow(QMainWindow):
     
     def check_files_ready(self):
         """Check if both files exist and enable/disable process button"""
-        fee_ready = os.path.exists(self.fee_file_path) if self.fee_file_path else False
+        # Get fee file path from settings
+        current_fee_path = self.get_fee_file_path_from_settings()
+        fee_ready = os.path.exists(current_fee_path) if current_fee_path else False
+        
         trans_ready = os.path.exists(self.transaction_file_path) if self.transaction_file_path else False
         
         self.process_btn.setEnabled(fee_ready and trans_ready)
@@ -270,20 +261,26 @@ class TransactionMatcherWindow(QMainWindow):
                 QTimer.singleShot(500, self.process_files)  # Small delay for UI responsiveness
                 
         elif not fee_ready and not trans_ready:
-            self.status_bar.showMessage("Please select both fee record and transaction files")
+            self.status_bar.showMessage("Please configure Fee Record File in Settings and select Transaction File")
         elif not fee_ready:
-            self.status_bar.showMessage("Please select a valid fee record file")
+            self.status_bar.showMessage("Please configure Fee Record File in Settings → File Paths")
         else:
             self.status_bar.showMessage("Please select a valid transaction file")
     
     def process_files(self):
         """Process the selected files"""
-        if not self.fee_file_path or not self.transaction_file_path:
-            QMessageBox.warning(self, "Warning", "Please select both files before processing.")
+        # Get current fee file path from settings
+        current_fee_path = self.get_fee_file_path_from_settings()
+        
+        if not current_fee_path or not self.transaction_file_path:
+            QMessageBox.warning(self, "Warning", 
+                              "Please configure Fee Record File in Settings → File Paths and select a Transaction File.")
             return
         
-        if not os.path.exists(self.fee_file_path):
-            QMessageBox.warning(self, "Warning", f"Fee file not found: {self.fee_file_path}")
+        if not os.path.exists(current_fee_path):
+            QMessageBox.warning(self, "Warning", 
+                              f"Fee Record File not found: {current_fee_path}\n\n"
+                              f"Please update the path in Settings → File Paths")
             return
             
         if not os.path.exists(self.transaction_file_path):
@@ -294,8 +291,8 @@ class TransactionMatcherWindow(QMainWindow):
         self.process_btn.setEnabled(False)
         self.status_bar.showMessage("Processing files...")
         
-        # Start processing in background thread
-        self.processing_thread = ProcessingThread(self.fee_file_path, self.transaction_file_path)
+        # Start processing in background thread with current fee file path
+        self.processing_thread = ProcessingThread(current_fee_path, self.transaction_file_path)
         self.processing_thread.finished.connect(self.on_processing_finished)
         self.processing_thread.error.connect(self.on_processing_error)
         self.processing_thread.start()
@@ -347,7 +344,7 @@ class TransactionMatcherWindow(QMainWindow):
         self.editable_table.clear_table()
         self.results_table.setRowCount(0)
         self.results_data = []
-        self.summary_label.setText("No results yet. Select files and click 'Process Files' to begin.")
+        self.summary_label.setText("No results yet. Select transaction file and click 'Process Files' to begin.")
         
         # Disable export buttons
         self.export_excel_btn.setEnabled(False)
@@ -373,14 +370,19 @@ class TransactionMatcherWindow(QMainWindow):
     
     def on_settings_applied(self):
         """Handle settings being applied"""
-        self.status_bar.showMessage("Settings applied successfully", 3000)
         # Reload any settings that affect the main window
         self.load_saved_file_paths()
+        # Recheck files ready status since fee file might have changed
+        self.check_files_ready()
+        # Show settings saved message AFTER other operations to prevent overwriting
+        self.status_bar.showMessage("Settings saved successfully")  # No timeout - persists until next message
     
     def on_settings_reset(self):
         """Handle settings being reset"""
-        self.status_bar.showMessage("Settings reset to defaults", 3000)
         self.load_saved_file_paths()
+        self.check_files_ready()
+        # Show reset message AFTER other operations to prevent overwriting
+        self.status_bar.showMessage("Settings reset to defaults")  # No timeout - persists until next message
     
     def closeEvent(self, event):
         """Handle window close event"""

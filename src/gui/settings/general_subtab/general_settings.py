@@ -1,19 +1,20 @@
 """
-General settings panel with VS Code-style layout matching the provided image
-Contains main title, subtitle, and organized sections like Auto Mode Timeout
+General settings panel with VS Code-style layout and individual scroll area
+Contains main title, subtitle, and organized sections like Interface Zoom
 File: src/gui/settings/general_subtab/general_settings.py
 """
 
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                             QPushButton, QComboBox, QCheckBox, QFrame, 
-                            QSizePolicy, QSpacerItem, QGroupBox, QGridLayout)
+                            QSizePolicy, QSpacerItem, QGroupBox, QGridLayout,
+                            QScrollArea)
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QFont
 
 
 class GeneralSettingsPanel(QWidget):
     """
-    General settings panel with VS Code-style layout
+    General settings panel with VS Code-style layout and individual scroll area
     Matches the structure shown in the provided image
     """
     
@@ -36,24 +37,53 @@ class GeneralSettingsPanel(QWidget):
         self.load_settings()
     
     def setup_ui(self):
-        """Setup the VS Code-style general settings UI"""
+        """Setup the VS Code-style general settings UI with individual scroll area"""
+        # Main layout for the panel
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(24, 24, 24, 24)
+        main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
+        
+        # Create scroll area for this panel's content
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll_area.setFrameStyle(QFrame.NoFrame)  # Remove scroll area border
+        
+        # FORCE WHITE BACKGROUND for scroll area
+        scroll_area.setStyleSheet("QScrollArea { background-color: white; }")
+        
+        # Content widget inside scroll area
+        content_widget = QWidget()
+        content_widget.setStyleSheet("QWidget { background-color: white; }")  # Force white background
+        content_layout = QVBoxLayout(content_widget)
+        content_layout.setContentsMargins(24, 24, 24, 24)
+        content_layout.setSpacing(0)
         
         # Header section
         header_section = self._create_header_section()
-        main_layout.addWidget(header_section)
+        content_layout.addWidget(header_section)
         
         # Add spacing after header
-        main_layout.addSpacing(40)
+        content_layout.addSpacing(40)
         
         # Zoom section only (in a box)
         zoom_section = self._create_zoom_section()
-        main_layout.addWidget(zoom_section)
+        content_layout.addWidget(zoom_section)
         
         # Add flexible space at bottom
-        main_layout.addStretch()
+        content_layout.addStretch()
+        
+        # Set content widget to scroll area
+        scroll_area.setWidget(content_widget)
+        
+        # Add scroll area to main layout
+        main_layout.addWidget(scroll_area)
+        
+        # Ensure proper size policies
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        content_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        scroll_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
     
     def _create_header_section(self):
         """Create the main header section like in VS Code"""
@@ -77,12 +107,12 @@ class GeneralSettingsPanel(QWidget):
         return header_widget
     
     def _create_zoom_section(self):
-        """Create the zoom section exactly like Auto Mode Timeout in your project"""
-        # Use QGroupBox with QGridLayout like your Auto Mode Timeout
+        """Create the zoom section exactly like Interface Zoom in your project"""
+        # Use QGroupBox with QGridLayout like your Interface Zoom
         zoom_group = QGroupBox("Interface Zoom")
         zoom_layout = QGridLayout(zoom_group)
         
-        # Row 0: Label and dropdown (like "Auto mode timeout:")
+        # Row 0: Label and dropdown (like "Interface zoom:")
         zoom_layout.addWidget(QLabel("Interface zoom:"), 0, 0)
         
         # Create horizontal layout for zoom controls
@@ -124,7 +154,7 @@ class GeneralSettingsPanel(QWidget):
         
         zoom_layout.addWidget(zoom_controls, 0, 1)
         
-        # Row 1: Help text spanning both columns (like your timeout help)
+        # Row 1: Help text spanning both columns (like your zoom help)
         zoom_help = QLabel("Interface scaling for better readability. Use keyboard shortcuts Ctrl+Plus/Minus or controls above.")
         zoom_help.setStyleSheet("color: gray;")  # Remove fixed font-size to allow zoom scaling
         zoom_help.setWordWrap(True)
