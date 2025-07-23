@@ -17,10 +17,10 @@
     "remember_zoom_level": true
   },
   "files": {
-    "last_fee_file": "C:/Users/user/Downloads/Parent-Student Matching Pair.xlsx",
-    "last_transaction_file": "C:\\Users\\user\\Downloads\\Fee Statements\\3985094904Statement (111).csv",
+    "last_fee_file": "",
+    "last_transaction_file": "C:\\Users\\user\\Downloads\\Fee Statements\\3985094904Statement (1111).csv",
     "remember_file_paths": true,
-    "fee_record_file": "C:/Users/user/Downloads/2025 Tuition Fee.xlsx"
+    "fee_record_file": "C:/Users/user/Downloads/today fee file.xlsx"
   },
   "ui": {
     "theme": "default",

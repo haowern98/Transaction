@@ -1,9 +1,12 @@
 """
 Core table integration wrapper
 Provides the main interface for the editable table with basic operations
+Updated with Fee Record Loading functionality
 """
 import os
-from PyQt5.QtWidgets import QTableWidgetItem, QHeaderView, QMessageBox
+import re
+from typing import List, Dict, Any
+from PyQt5.QtWidgets import QTableWidgetItem, QHeaderView, QMessageBox, QDialog
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
 
@@ -409,6 +412,152 @@ class IntegratedEditableTable:
         self.data_manager.clear_change_tracking()
         self.has_changes = False
         self.update_button_states()
+    
+    def load_to_fee_record(self, fee_record_file_path: str) -> bool:
+        """
+        Load current table data to fee record file
+        
+        Args:
+            fee_record_file_path: Path to the fee record Excel file
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            # Get current table data using existing method
+            current_data = self.get_all_data()
+            
+            if not current_data:
+                QMessageBox.warning(None, "No Data", "No data available to load to fee record.")
+                return False
+            
+            # Validate data before loading
+            validation_errors = self._validate_fee_record_data(current_data)
+            if validation_errors:
+                error_msg = "Data validation failed:\n\n" + "\n".join(validation_errors[:5])
+                if len(validation_errors) > 5:
+                    error_msg += f"\n... and {len(validation_errors) - 5} more errors"
+                QMessageBox.warning(None, "Validation Error", error_msg)
+                return False
+            
+            # Import and use fee record loader dialog
+            from gui.fee_record_loader import show_fee_record_loader
+            
+            # Show confirmation dialog and perform loading
+            result = show_fee_record_loader(current_data, fee_record_file_path, self.table)
+            
+            return result == QDialog.Accepted
+            
+        except Exception as e:
+            QMessageBox.critical(None, "Error", f"Failed to load data to fee record:\n{str(e)}")
+            return False
+
+    def _validate_fee_record_data(self, table_data: List[List[str]]) -> List[str]:
+        """
+        Validate table data before loading to fee record
+        
+        Args:
+            table_data: Current table data
+            
+        Returns:
+            List of validation error messages
+        """
+        errors = []
+        
+        if not table_data:
+            errors.append("No data to validate")
+            return errors
+        
+        # Expected column structure: [Transaction Reference, Transaction Date, Matched Parent, 
+        #                            Matched Child, Month Paying For, Amount]
+        required_columns = 6
+        
+        for i, row in enumerate(table_data):
+            row_num = i + 1
+            
+            # Check minimum column count
+            if len(row) < required_columns:
+                errors.append(f"Row {row_num}: Missing columns (expected {required_columns}, got {len(row)})")
+                continue
+            
+            # Validate required fields for fee record loading
+            matched_parent = row[2].strip() if len(row) > 2 and row[2] else ""
+            month_paying_for = row[4].strip() if len(row) > 4 and row[4] else ""
+            
+            if not matched_parent:
+                errors.append(f"Row {row_num}: Missing 'Matched Parent' - required for fee record loading")
+            
+            if not month_paying_for:
+                errors.append(f"Row {row_num}: Missing 'Month Paying For' - required for fee record loading")
+            else:
+                # Validate month format (should be 3-letter format like "Jun", "Dec")
+                valid_months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", 
+                              "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+                if month_paying_for not in valid_months:
+                    errors.append(f"Row {row_num}: Invalid month format '{month_paying_for}' "
+                                f"(expected: {', '.join(valid_months)})")
+            
+            # Validate amount format if present
+            amount = row[5].strip() if len(row) > 5 and row[5] else ""
+            if amount:
+                try:
+                    # Try to parse as float (remove common currency symbols and commas)
+                    cleaned_amount = amount.replace(',', '').replace('$', '').replace('RM', '').strip()
+                    if cleaned_amount:
+                        float(cleaned_amount)
+                except ValueError:
+                    errors.append(f"Row {row_num}: Invalid amount format '{amount}'")
+            
+            # Validate date format if present (optional validation)
+            transaction_date = row[1].strip() if len(row) > 1 and row[1] else ""
+            if transaction_date:
+                # Basic date format validation (could be enhanced)
+                date_patterns = [
+                    r'^\d{1,2}/\d{1,2}/\d{4}$',  # DD/MM/YYYY or MM/DD/YYYY
+                    r'^\d{4}-\d{1,2}-\d{1,2}$',  # YYYY-MM-DD
+                    r'^\d{1,2}-\d{1,2}-\d{4}$',  # DD-MM-YYYY or MM-DD-YYYY
+                ]
+                
+                valid_date = False
+                for pattern in date_patterns:
+                    if re.match(pattern, transaction_date):
+                        valid_date = True
+                        break
+                
+                if not valid_date:
+                    errors.append(f"Row {row_num}: Invalid date format '{transaction_date}' "
+                                f"(expected: DD/MM/YYYY, YYYY-MM-DD, or DD-MM-YYYY)")
+        
+        return errors
+
+    def get_fee_record_validation_summary(self) -> Dict[str, Any]:
+        """
+        Get validation summary for fee record loading
+        
+        Returns:
+            Dictionary with validation statistics
+        """
+        current_data = self.get_all_data()
+        errors = self._validate_fee_record_data(current_data)
+        
+        # Count valid vs invalid rows
+        valid_rows = 0
+        total_rows = len(current_data)
+        
+        for row in current_data:
+            if (len(row) >= 6 and 
+                row[2] and row[2].strip() and  # Has matched parent
+                row[4] and row[4].strip()):    # Has month paying for
+                valid_rows += 1
+        
+        return {
+            'total_rows': total_rows,
+            'valid_rows': valid_rows,
+            'invalid_rows': total_rows - valid_rows,
+            'validation_errors': errors,
+            'has_errors': len(errors) > 0,
+            'ready_for_loading': len(errors) == 0 and total_rows > 0
+        }
         
     # Provide access to the underlying table widget for compatibility
     def __getattr__(self, name):

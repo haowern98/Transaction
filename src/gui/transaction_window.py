@@ -1,6 +1,6 @@
 """
 Main window for the Transaction Matcher GUI application
-Updated to remove the Parent-Student Pair File field from File Processing tab
+Updated to properly check saved fee record file path from settings
 File: src/gui/transaction_window.py
 """
 import sys
@@ -8,13 +8,14 @@ import os
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QTabWidget, QWidget, 
                             QVBoxLayout, QHBoxLayout, QGroupBox, QLabel, 
                             QPushButton, QLineEdit, QFileDialog, QMessageBox, 
-                            QStatusBar)
+                            QStatusBar, QDialog)
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
 from PyQt5.QtGui import QFont
 
 # Import dependencies
 from core.processor import process_fee_matching_gui
 from gui.table_wrapper import IntegratedEditableTable
+from gui.fee_record_loader import show_fee_record_loader
 
 
 class ProcessingThread(QThread):
@@ -77,7 +78,7 @@ class TransactionMatcherWindow(QMainWindow):
         # Create tabs
         self.create_file_processing_tab()
         self.create_settings_tab()
-        
+    
     def create_file_processing_tab(self):
         """Create the file processing tab"""
         tab = QWidget()
@@ -139,7 +140,6 @@ class TransactionMatcherWindow(QMainWindow):
         
         # Summary row
         self.summary_label = QLabel("No results yet. Select transaction file and click 'Process Files' to begin.")
-        self.summary_label.setFont(QFont("Arial", 9))
         results_layout.addWidget(self.summary_label)
         
         # Results table (using editable table)
@@ -156,10 +156,11 @@ class TransactionMatcherWindow(QMainWindow):
         return results_group
     
     def _create_export_buttons(self):
-        """Create the export buttons layout"""
+        """Create the export buttons layout including Load to Fee Record"""
         export_layout = QHBoxLayout()
         export_layout.addStretch()
         
+        # Existing export buttons
         self.export_excel_btn = QPushButton("Export to Excel")
         self.export_excel_btn.clicked.connect(self.export_to_excel)
         self.export_excel_btn.setEnabled(False)
@@ -169,6 +170,12 @@ class TransactionMatcherWindow(QMainWindow):
         self.export_csv_btn.clicked.connect(self.export_to_csv)
         self.export_csv_btn.setEnabled(False)
         export_layout.addWidget(self.export_csv_btn)
+        
+        # Load to Fee Record button with DEFAULT STYLING (same as others)
+        self.load_fee_record_btn = QPushButton("Load to Fee Record")
+        self.load_fee_record_btn.clicked.connect(self.load_to_fee_record)
+        self.load_fee_record_btn.setEnabled(False)
+        export_layout.addWidget(self.load_fee_record_btn)
         
         self.save_report_btn = QPushButton("Save Report")
         self.save_report_btn.clicked.connect(self.save_report)
@@ -189,11 +196,46 @@ class TransactionMatcherWindow(QMainWindow):
         self.settings_tab.settings_applied.connect(self.on_settings_applied)
         self.settings_tab.settings_reset.connect(self.on_settings_reset)
     
+    def get_fee_record_file_path_from_settings(self):
+        """
+        Get fee record file path from settings - FIXED to check all sources
+        This is the MAIN method that should be used everywhere
+        """
+        try:
+            # Method 1: Try to get from Settings tab file_paths_panel (if available)
+            if hasattr(self.settings_tab, 'file_paths_panel'):
+                fee_record_path = self.settings_tab.file_paths_panel.get_fee_record_file_path()
+                if fee_record_path and fee_record_path.strip():
+                    print(f"DEBUG: Got fee record path from file_paths_panel: '{fee_record_path}'")
+                    return fee_record_path.strip()
+            
+            # Method 2: Get directly from settings manager (THIS IS THE KEY FIX)
+            saved_fee_record_file = self.settings_manager.get_setting('files.fee_record_file', '')
+            if saved_fee_record_file and saved_fee_record_file.strip():
+                print(f"DEBUG: Got fee record path from settings manager: '{saved_fee_record_file}'")
+                return saved_fee_record_file.strip()
+            
+            # Method 3: Fallback to old settings key for backward compatibility
+            saved_fee_file = self.settings_manager.get_setting('files.last_fee_file', '')
+            if saved_fee_file and saved_fee_file.strip():
+                print(f"DEBUG: Got fee record path from legacy settings: '{saved_fee_file}'")
+                return saved_fee_file.strip()
+            
+            print("DEBUG: No fee record path found in any settings")
+            return ""
+            
+        except Exception as e:
+            print(f"Warning: Could not get fee record file from settings: {e}")
+            return ""
+    
     def get_fee_file_path_from_settings(self):
-        """Get fee file path from Settings tab"""
+        """
+        Get fee file path from Settings tab - LEGACY method for processing
+        This gets the Parent-Student pair file for processing
+        """
         try:
             if hasattr(self.settings_tab, 'file_paths_panel'):
-                fee_path = self.settings_tab.file_paths_panel.get_fee_record_file_path()
+                fee_path = self.settings_tab.file_paths_panel.get_fee_file_path()
                 if fee_path and os.path.exists(fee_path):
                     return fee_path
             
@@ -309,6 +351,9 @@ class TransactionMatcherWindow(QMainWindow):
         self.export_csv_btn.setEnabled(True)
         self.save_report_btn.setEnabled(True)
         
+        # Enable Load to Fee Record button only if fee record file is configured
+        self.update_fee_record_button_state()
+        
         self.status_bar.showMessage("Processing completed successfully")
     
     def on_processing_error(self, error_message):
@@ -350,6 +395,7 @@ class TransactionMatcherWindow(QMainWindow):
         self.export_excel_btn.setEnabled(False)
         self.export_csv_btn.setEnabled(False)
         self.save_report_btn.setEnabled(False)
+        self.load_fee_record_btn.setEnabled(False)
         
         self.status_bar.showMessage("Results cleared")
     
@@ -368,21 +414,116 @@ class TransactionMatcherWindow(QMainWindow):
         from gui.session_manager import save_detailed_report
         save_detailed_report(self.editable_table, self.summary_label.text(), self)
     
+    def load_to_fee_record(self):
+        """Load current table data to fee record file"""
+        try:
+            # Get fee record file path from settings - FIXED METHOD
+            fee_record_path = self.get_fee_record_file_path_from_settings()
+            
+            if not fee_record_path:
+                QMessageBox.warning(self, "Fee Record File Required", 
+                                  "Please configure the Fee Record File path in Settings → File Paths")
+                return
+                
+            if not os.path.exists(fee_record_path):
+                QMessageBox.warning(self, "File Not Found", 
+                                  f"Fee Record File not found:\n{fee_record_path}\n\n"
+                                  "Please update the path in Settings → File Paths")
+                return
+            
+            # Get current table data
+            table_data = self.editable_table.get_all_data()
+            
+            if not table_data:
+                QMessageBox.warning(self, "No Data", "No data available to load to fee record.")
+                return
+            
+            # Show fee record loader dialog
+            result = show_fee_record_loader(table_data, fee_record_path, self)
+            
+            if result == QDialog.Accepted:
+                self.status_bar.showMessage("Data loaded to fee record successfully")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to load data to fee record:\n{str(e)}")
+    
+    def update_fee_record_button_state(self):
+        """Update Load to Fee Record button state - FIXED to properly check saved settings"""
+        try:
+            # Check if we have data - EITHER from processing OR from loaded session
+            has_processed_data = len(self.results_data) > 0
+            has_table_data = self.editable_table.table.rowCount() > 0
+            has_data = has_processed_data or has_table_data
+            
+            # Check if fee record file is configured and exists - FIXED METHOD
+            fee_record_path = self.get_fee_record_file_path_from_settings()
+            fee_record_configured = bool(fee_record_path and os.path.exists(fee_record_path))
+            
+            # DEBUG: Print status to help diagnose
+            print(f"DEBUG Fee Record Button State:")
+            print(f"  - Has processed data: {has_processed_data} (results count: {len(self.results_data)})")
+            print(f"  - Has table data: {has_table_data} (table rows: {self.editable_table.table.rowCount()})")
+            print(f"  - Has data (either): {has_data}")
+            print(f"  - Fee record path: '{fee_record_path}'")
+            print(f"  - Fee record file exists: {os.path.exists(fee_record_path) if fee_record_path else False}")
+            print(f"  - Fee record configured: {fee_record_configured}")
+            
+            # Enable button only if both conditions are met
+            button_enabled = has_data and fee_record_configured
+            self.load_fee_record_btn.setEnabled(button_enabled)
+            
+            # Update tooltip to explain why button might be disabled
+            if not has_data:
+                tooltip = "Process files or load a session first to enable loading to fee record"
+            elif not fee_record_configured:
+                if not fee_record_path:
+                    tooltip = "Configure Fee Record File in Settings → File Paths"
+                else:
+                    tooltip = f"Fee Record File not found: {fee_record_path}"
+            else:
+                tooltip = "Load current table data to fee record file"
+                
+            self.load_fee_record_btn.setToolTip(tooltip)
+            
+            print(f"  - Button enabled: {button_enabled}")
+            print(f"  - Tooltip: {tooltip}")
+                
+        except Exception as e:
+            print(f"Error updating fee record button state: {e}")
+            self.load_fee_record_btn.setEnabled(False)
+            self.load_fee_record_btn.setToolTip("Error checking fee record configuration")
+    
     def on_settings_applied(self):
         """Handle settings being applied"""
         # Reload any settings that affect the main window
         self.load_saved_file_paths()
         # Recheck files ready status since fee file might have changed
         self.check_files_ready()
+        # Update fee record button state since fee record path might have changed
+        self.update_fee_record_button_state()
         # Show settings saved message AFTER other operations to prevent overwriting
-        self.status_bar.showMessage("Settings saved successfully")  # No timeout - persists until next message
+        self.status_bar.showMessage("Settings saved successfully")
     
     def on_settings_reset(self):
         """Handle settings being reset"""
         self.load_saved_file_paths()
         self.check_files_ready()
+        # Update fee record button state after reset
+        self.update_fee_record_button_state()
         # Show reset message AFTER other operations to prevent overwriting
-        self.status_bar.showMessage("Settings reset to defaults")  # No timeout - persists until next message
+        self.status_bar.showMessage("Settings reset to defaults")
+    
+    def on_session_loaded(self):
+        """Called when a session is successfully loaded"""
+        # Update button states since we now have data in the table
+        self.update_fee_record_button_state()
+        print("DEBUG: Session loaded, button state updated")
+    
+    def showEvent(self, event):
+        """Handle window show event - update button states when window becomes visible"""
+        super().showEvent(event)
+        # Update button states when window is shown (helps with startup state)
+        QTimer.singleShot(100, self.update_fee_record_button_state)
     
     def closeEvent(self, event):
         """Handle window close event"""
