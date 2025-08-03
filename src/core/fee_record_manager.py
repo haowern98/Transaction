@@ -1,6 +1,7 @@
 """
-Enhanced Fee Record Manager - Core Excel operations with conflict handling
+Enhanced Fee Record Manager - Core Excel operations with automatic color removal
 FIXED: Smart decimal formatting with explicit Excel number format override
+AUTO CLEAR: Removes all highlights (red, yellow, light blue) before each new data load
 File: src/core/fee_record_manager.py
 """
 import pandas as pd
@@ -14,7 +15,7 @@ import shutil
 
 
 class FeeRecordManager:
-    """Enhanced manager for loading preview table data into Fee Record Excel file with conflict handling"""
+    """Enhanced manager for loading preview table data into Fee Record Excel file with automatic color clearing"""
     
     # Month name mapping from preview table to fee record headers
     MONTH_MAPPING = {
@@ -49,9 +50,53 @@ class FeeRecordManager:
             start_color="E6F3FF", end_color="E6F3FF", fill_type="solid"
         )
         
+        # Colors to clear automatically (RGB hex values)
+        self.colors_to_clear = {
+            "FFFF00",    # Yellow (highlight_fill)
+            "FF6B6B",    # Red (conflict_fill)
+            "E6F3FF"     # Light blue (new_parent_fill)
+        }
+        
         # Track updated cells
         self.updated_cells = []
         self.conflict_cells = []
+        self.cleared_cells_count = 0
+    
+    def _clear_all_highlights(self):
+        """
+        Automatically clear all highlight colors before loading new data
+        Removes yellow, red, and light blue fills while preserving other formatting
+        """
+        if not self.worksheet:
+            return
+            
+        self.cleared_cells_count = 0
+        
+        print("🧹 Clearing previous highlights before loading new data...")
+        
+        # Scan all cells in the used range
+        for row in range(1, self.worksheet.max_row + 1):
+            for col in range(1, self.worksheet.max_column + 1):
+                cell = self.worksheet.cell(row=row, column=col)
+                
+                # Check if cell has a fill color we want to clear
+                if cell.fill and hasattr(cell.fill, 'start_color') and cell.fill.start_color:
+                    cell_color = str(cell.fill.start_color.rgb) if cell.fill.start_color.rgb else ""
+                    
+                    # Remove the '00' prefix if present (openpyxl sometimes adds it)
+                    if cell_color.startswith('00') and len(cell_color) == 8:
+                        cell_color = cell_color[2:]
+                    
+                    # Clear if it matches any of our highlight colors
+                    if cell_color.upper() in self.colors_to_clear:
+                        # Remove fill while preserving other formatting
+                        cell.fill = PatternFill()  # Reset to no fill
+                        self.cleared_cells_count += 1
+        
+        if self.cleared_cells_count > 0:
+            print(f"✓ Cleared {self.cleared_cells_count} highlighted cells")
+        else:
+            print("✓ No previous highlights found to clear")
     
     def _format_amount_smart(self, amount_str: str) -> str:
         """
@@ -115,7 +160,7 @@ class FeeRecordManager:
 
     def load_table_data_to_fee_record(self, table_data: List[List[str]], 
                                      fee_record_file_path: str) -> Dict[str, Any]:
-        """Main method to load preview table data into fee record file with conflict handling"""
+        """Main method to load preview table data into fee record file with automatic color clearing"""
         try:
             if not table_data:
                 return {"success": False, "error": "No data to load"}
@@ -146,8 +191,14 @@ class FeeRecordManager:
                     "error": f"Failed to open Excel file. Error: {str(e)}"
                 }
             
+            # 🧹 AUTOMATIC COLOR CLEARING - Clear all highlights before processing new data
+            self._clear_all_highlights()
+            
             self._analyze_fee_record_structure()
             stats = self._process_table_data_with_conflicts(table_data)
+            
+            # Add clearing statistics to result
+            stats["cleared_cells"] = self.cleared_cells_count
             
             try:
                 self.workbook.save(fee_record_file_path)
