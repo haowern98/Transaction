@@ -1,6 +1,7 @@
 """
 Main window for the Transaction Matcher GUI application
 Updated to properly check saved fee record file path from settings
+Integrated with Outstanding Payments Tab functionality
 File: src/gui/transaction_window.py
 """
 import sys
@@ -16,6 +17,7 @@ from PyQt5.QtGui import QFont
 from core.processor import process_fee_matching_gui
 from gui.table_wrapper import IntegratedEditableTable
 from gui.fee_record_loader import show_fee_record_loader
+from gui.outstanding_payments_tab import OutstandingPaymentsTab
 
 
 class ProcessingThread(QThread):
@@ -76,6 +78,7 @@ class TransactionMatcherWindow(QMainWindow):
         self.status_bar.showMessage("Ready")
         
         # Create tabs
+        self.create_outstanding_payments_tab()
         self.create_file_processing_tab()
         self.create_settings_tab()
     
@@ -196,6 +199,25 @@ class TransactionMatcherWindow(QMainWindow):
         self.settings_tab.settings_applied.connect(self.on_settings_applied)
         self.settings_tab.settings_reset.connect(self.on_settings_reset)
     
+    def create_outstanding_payments_tab(self):
+        """Create the Outstanding Payments tab"""
+        try:
+            self.outstanding_payments_tab = OutstandingPaymentsTab(self)
+            self.tab_widget.addTab(self.outstanding_payments_tab, "Outstanding Payments")
+            
+            # Connect tab signals if needed
+            # self.outstanding_payments_tab.some_signal.connect(self.some_handler)
+            
+            print("✓ Outstanding Payments tab created successfully")
+            
+        except Exception as e:
+            print(f"✗ Failed to create Outstanding Payments tab: {e}")
+            # Create placeholder tab if import fails
+            placeholder = QWidget()
+            placeholder_layout = QVBoxLayout(placeholder)
+            placeholder_layout.addWidget(QLabel("Outstanding Payments tab temporarily unavailable"))
+            self.tab_widget.addTab(placeholder, "Outstanding Payments")
+    
     def get_fee_record_file_path_from_settings(self):
         """
         Get fee record file path from settings - FIXED to check all sources
@@ -296,7 +318,7 @@ class TransactionMatcherWindow(QMainWindow):
         self.process_btn.setEnabled(fee_ready and trans_ready)
         
         if fee_ready and trans_ready:
-            self.status_bar.showMessage("Files ready - click 'Process Files' to begin")
+            self.status_bar.showMessage("Files ready for processing")
             
             # Auto-process if enabled in settings
             if hasattr(self, 'settings_tab') and self.settings_tab.should_auto_process():
@@ -501,6 +523,15 @@ class TransactionMatcherWindow(QMainWindow):
         self.check_files_ready()
         # Update fee record button state since fee record path might have changed
         self.update_fee_record_button_state()
+        
+        # NEW: Refresh Outstanding Payments tab if it exists
+        if hasattr(self, 'outstanding_payments_tab'):
+            try:
+                self.outstanding_payments_tab.load_fee_record_path()
+                print("✓ Outstanding Payments tab refreshed after settings change")
+            except Exception as e:
+                print(f"Warning: Failed to refresh Outstanding Payments tab: {e}")
+        
         # Show settings saved message AFTER other operations to prevent overwriting
         self.status_bar.showMessage("Settings saved successfully")
     
@@ -510,6 +541,15 @@ class TransactionMatcherWindow(QMainWindow):
         self.check_files_ready()
         # Update fee record button state after reset
         self.update_fee_record_button_state()
+        
+        # NEW: Refresh Outstanding Payments tab if it exists
+        if hasattr(self, 'outstanding_payments_tab'):
+            try:
+                self.outstanding_payments_tab.load_fee_record_path()
+                print("✓ Outstanding Payments tab refreshed after settings reset")
+            except Exception as e:
+                print(f"Warning: Failed to refresh Outstanding Payments tab: {e}")
+        
         # Show reset message AFTER other operations to prevent overwriting
         self.status_bar.showMessage("Settings reset to defaults")
     
