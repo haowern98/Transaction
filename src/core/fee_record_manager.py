@@ -1,6 +1,6 @@
 """
 Enhanced Fee Record Manager - Core Excel operations with conflict handling
-Fixed all syntax errors and indentation issues
+FIXED: Smart decimal formatting with explicit Excel number format override
 File: src/core/fee_record_manager.py
 """
 import pandas as pd
@@ -52,7 +52,67 @@ class FeeRecordManager:
         # Track updated cells
         self.updated_cells = []
         self.conflict_cells = []
-        
+    
+    def _format_amount_smart(self, amount_str: str) -> str:
+        """
+        FIXED: Format amount to show decimals only when necessary
+        - Whole numbers: 100 → "100" 
+        - With decimals: 100.50 → "100.5", 100.75 → "100.75"
+        """
+        if not amount_str or not amount_str.strip():
+            return ""
+            
+        try:
+            # Clean the amount string
+            cleaned = amount_str.replace(',', '').replace('$', '').replace('RM', '').strip()
+            if not cleaned:
+                return ""
+                
+            amount_float = float(cleaned)
+            
+            # Check if it's a whole number (no fractional part)
+            if amount_float == int(amount_float):
+                return str(int(amount_float))  # Return as integer: "100"
+            else:
+                # Format with 2 decimals, then remove trailing zeros
+                formatted = f"{amount_float:.2f}"
+                # Remove trailing zeros: "100.50" → "100.5", "100.00" → "100"
+                formatted = formatted.rstrip('0').rstrip('.')
+                return formatted
+                
+        except (ValueError, TypeError):
+            # If parsing fails, return original string
+            return amount_str.strip()
+    
+    def _set_cell_value_as_number(self, cell, value_str: str):
+        """
+        Set cell value as actual number AND override Excel's number format
+        """
+        try:
+            # Clean the value string
+            cleaned = value_str.replace(',', '').replace('$', '').replace('RM', '').strip()
+            if not cleaned:
+                cell.value = ""
+                return
+                
+            # Convert to float first
+            number_value = float(cleaned)
+            
+            # If it's a whole number, store as integer and set format to show no decimals
+            if number_value == int(number_value):
+                cell.value = int(number_value)
+                # FORCE Excel to display as integer (no decimals)
+                cell.number_format = '0'
+            else:
+                # Store as float and set format to remove trailing zeros
+                cell.value = number_value
+                # Format to show decimals only when needed
+                cell.number_format = '0.##'
+                
+        except (ValueError, TypeError):
+            # If conversion fails, store as text
+            cell.value = value_str
+
     def load_table_data_to_fee_record(self, table_data: List[List[str]], 
                                      fee_record_file_path: str) -> Dict[str, Any]:
         """Main method to load preview table data into fee record file with conflict handling"""
@@ -294,19 +354,17 @@ class FeeRecordManager:
                     'parent': parent_name, 'month': month_full
                 })
         
-        # Process amount cell
+        # Process amount cell - FIXED: Store as actual number with explicit format
         if amount and "amount_col" in month_cols:
             amount_cell = self.worksheet.cell(row=target_row, column=month_cols["amount_col"])
             
-            try:
-                amount_float = float(amount.replace(',', '').replace('$', '').replace('RM', ''))
-                formatted_amount = f"{amount_float:.2f}"
-            except ValueError:
-                formatted_amount = amount
-            
-            had_conflict = self._append_to_cell_simple(amount_cell, formatted_amount)
-            
-            if had_conflict:
+            # Check if cell already has content (conflict handling)
+            if not self._is_cell_empty(amount_cell):
+                # Conflict: append to existing content as text
+                formatted_amount = self._format_amount_smart(amount)
+                existing_value = str(amount_cell.value).strip()
+                combined_value = f"{existing_value}; {formatted_amount}"
+                amount_cell.value = combined_value
                 amount_cell.fill = self.conflict_fill
                 result["appended_entries"] += 1
                 result["conflicts"] += 1
@@ -316,11 +374,13 @@ class FeeRecordManager:
                     'parent': parent_name, 'month': month_full
                 })
             else:
+                # No conflict: store as actual number with explicit formatting
+                self._set_cell_value_as_number(amount_cell, amount)
                 amount_cell.fill = self.highlight_fill
                 result["new_entries"] += 1
                 self.updated_cells.append({
                     'row': target_row, 'col': month_cols["amount_col"],
-                    'type': 'amount', 'value': formatted_amount,
+                    'type': 'amount', 'value': str(amount_cell.value),
                     'parent': parent_name, 'month': month_full
                 })
         
