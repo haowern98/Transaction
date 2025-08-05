@@ -389,20 +389,13 @@ class TransactionMatcherWindow(QMainWindow):
         self.editable_table.populate_results_table(self.results_data)
     
     def update_summary(self, results):
-        """Update the summary label with statistics"""
+        """Update the summary label with simplified statistics"""
         total = results.get('total_processed', 0)
         matched = results.get('matched_count', 0)
         unmatched = results.get('unmatched_count', 0)
-        parent_matched = results.get('parent_matched_count', 0)
-        child_matched = results.get('child_matched_count', 0)
         
-        match_rate = (matched / total * 100) if total > 0 else 0
-        parent_rate = (parent_matched / total * 100) if total > 0 else 0
-        child_rate = (child_matched / total * 100) if total > 0 else 0
-        
-        summary_text = (f"Total: {total} | Matched: {matched} | Unmatched: {unmatched} | "
-                       f"Match Rate: {match_rate:.1f}% | Parent Matches: {parent_rate:.1f}% | "
-                       f"Child Matches: {child_rate:.1f}%")
+        # Simplified summary - only show Total, Matched, Unmatched
+        summary_text = f"Total: {total} | Matched: {matched} | Unmatched: {unmatched}"
         
         self.summary_label.setText(summary_text)
     

@@ -1,7 +1,7 @@
 # File: src/gui/outstanding_payments_tab/outstanding_payments_tab.py
 """
-Outstanding Payments Tab - Simplified version with title, refresh button, and single export button
-Shows parents and their outstanding months in a clean two-column format
+Outstanding Payments Tab - Updated with Student Names column
+Shows parents, their students, and outstanding months in a clean three-column format
 """
 
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, 
@@ -42,6 +42,14 @@ class AnalysisThread(QThread):
                 self.error.emit("No months found in fee record")
                 return
             
+            # Get all parents first to map parent->student relationships
+            all_parents = analyzer.get_all_parents()
+            parent_student_map = {}
+            for parent_info in all_parents:
+                parent_name = parent_info["parent_name"]
+                student_name = parent_info["student_name"]
+                parent_student_map[parent_name] = student_name
+            
             # Analyze each month to find outstanding payments
             all_outstanding = {}  # {parent_name: [list_of_outstanding_months]}
             
@@ -71,11 +79,13 @@ class AnalysisThread(QThread):
                                 all_outstanding[parent_name] = []
                             all_outstanding[parent_name].append(month_display)
             
-            # Format results
+            # Format results with student names
             outstanding_list = []
             for parent_name, months in all_outstanding.items():
+                student_name = parent_student_map.get(parent_name, "")
                 outstanding_list.append({
                     'parent_name': parent_name,
+                    'student_name': student_name,
                     'outstanding_months': months,
                     'outstanding_months_str': ', '.join(sorted(months))
                 })
@@ -100,8 +110,8 @@ class AnalysisThread(QThread):
 
 class OutstandingPaymentsTab(QWidget):
     """
-    Simplified Outstanding Payments Tab
-    Shows title, description, results table with refresh button, and single export button
+    Outstanding Payments Tab with Student Names
+    Shows title, description, results table with Parent | Student | Outstanding Months
     """
     
     def __init__(self, parent=None):
@@ -123,7 +133,7 @@ class OutstandingPaymentsTab(QWidget):
         self.auto_generate_if_ready()
         
     def setup_ui(self):
-        """Setup simplified UI with title, table with refresh button, and export button"""
+        """Setup UI with title, three-column table with refresh button, and export button"""
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(24, 24, 24, 24)  # Same as general settings
         main_layout.setSpacing(0)
@@ -158,7 +168,7 @@ class OutstandingPaymentsTab(QWidget):
         header_layout.addWidget(title_label)
         
         # Subtitle - SAME FONT as General Settings
-        subtitle_label = QLabel("View parents who have not made payments for specific months")
+        subtitle_label = QLabel("View parents and students who have not made payments for specific months")
         subtitle_label.setFont(QFont("Tahoma", 8, QFont.Normal))  # Same as General Settings
         subtitle_label.setStyleSheet("color: #1f1f1f;")
         header_layout.addWidget(subtitle_label)
@@ -211,23 +221,25 @@ class OutstandingPaymentsTab(QWidget):
         return export_widget
         
     def setup_results_table(self):
-        """Setup the two-column results table"""
-        # Set columns: Parent Name | Outstanding Months
-        headers = ["Parent Name", "Outstanding Months"]
+        """Setup the three-column results table: Parent | Student | Outstanding Months"""
+        # Set columns: Parent Name | Student Name | Outstanding Months
+        headers = ["Parent Name", "Student Name", "Outstanding Months"]
         self.results_table.setColumnCount(len(headers))
         self.results_table.setHorizontalHeaderLabels(headers)
         
         # Configure table properties
         self.results_table.setAlternatingRowColors(True)
         self.results_table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.results_table.setSortingEnabled(True)
+        self.results_table.setSortingEnabled(False)  # Disable sorting arrows
         
         # Set column widths
         header = self.results_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.Interactive)  # Parent Name
-        header.setSectionResizeMode(1, QHeaderView.Stretch)     # Outstanding Months
+        header.setSectionResizeMode(1, QHeaderView.Interactive)  # Student Name
+        header.setSectionResizeMode(2, QHeaderView.Stretch)     # Outstanding Months
         
         self.results_table.setColumnWidth(0, 300)  # Parent Name width
+        self.results_table.setColumnWidth(1, 250)  # Student Name width
         
     def auto_generate_if_ready(self):
         """Automatically generate outstanding list if fee record is available"""
@@ -307,7 +319,7 @@ class OutstandingPaymentsTab(QWidget):
         self.export_csv_btn.setEnabled(False)
     
     def populate_results_table(self, results: Dict[str, Any]):
-        """Populate the two-column results table"""
+        """Populate the three-column results table"""
         outstanding_parents = results.get('outstanding_parents', [])
         
         # Set row count
@@ -315,21 +327,25 @@ class OutstandingPaymentsTab(QWidget):
         
         # Populate table
         for row, parent_data in enumerate(outstanding_parents):
-            # Parent Name
+            # Parent Name (Column 0)
             parent_name = parent_data.get('parent_name', '')
             self.results_table.setItem(row, 0, QTableWidgetItem(parent_name))
             
-            # Outstanding Months (comma-separated)
+            # Student Name (Column 1)
+            student_name = parent_data.get('student_name', '')
+            self.results_table.setItem(row, 1, QTableWidgetItem(student_name))
+            
+            # Outstanding Months (Column 2)
             outstanding_months = parent_data.get('outstanding_months_str', '')
-            self.results_table.setItem(row, 1, QTableWidgetItem(outstanding_months))
+            self.results_table.setItem(row, 2, QTableWidgetItem(outstanding_months))
     
     def export_to_csv(self):
-        """Export outstanding payments to CSV"""
+        """Export outstanding payments to CSV including student names"""
         if not self.current_results:
             QMessageBox.warning(self, "Warning", "No results to export.")
             return
         
-        # Prepare data for CSV export
+        # Prepare data for CSV export with student names
         export_data = {
             'outstanding_parents': self.current_results.get('outstanding_parents', []),
             'total_parents': self.current_results.get('total_parents_with_outstanding', 0),
