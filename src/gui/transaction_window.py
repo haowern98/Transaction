@@ -1,7 +1,6 @@
 """
 Main window for the Transaction Matcher GUI application
-Updated to properly check saved fee record file path from settings
-Integrated with Outstanding Payments Tab functionality
+Updated with improved toolbar layout - editing controls moved to top left below summary
 File: src/gui/transaction_window.py
 """
 import sys
@@ -9,7 +8,7 @@ import os
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QTabWidget, QWidget, 
                             QVBoxLayout, QHBoxLayout, QGroupBox, QLabel, 
                             QPushButton, QLineEdit, QFileDialog, QMessageBox, 
-                            QStatusBar, QDialog)
+                            QStatusBar, QDialog, QFrame, QSpacerItem, QSizePolicy)
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
 from PyQt5.QtGui import QFont
 
@@ -83,20 +82,20 @@ class TransactionMatcherWindow(QMainWindow):
         self.create_settings_tab()
     
     def create_file_processing_tab(self):
-        """Create the file processing tab"""
+        """Create the file processing tab with improved layout"""
         tab = QWidget()
         self.tab_widget.addTab(tab, "File Processing")
         
         layout = QVBoxLayout(tab)
         
-        # File Selection Group (only Transaction File now)
+        # File Selection Group
         layout.addWidget(self._create_file_selection_group())
         
         # Check if default files are ready on startup
         self.check_files_ready()
         
-        # Results Group
-        layout.addWidget(self._create_results_group())
+        # Results Group with improved layout
+        layout.addWidget(self._create_results_group_improved())
         
         # Set stretch factors to make results section much larger
         layout.setStretchFactor(layout.itemAt(0).widget(), 0)  # File selection
@@ -136,8 +135,8 @@ class TransactionMatcherWindow(QMainWindow):
         
         return file_group
     
-    def _create_results_group(self):
-        """Create the results display group box"""
+    def _create_results_group_improved(self):
+        """Create the results display group box with improved toolbar layout"""
         results_group = QGroupBox("Matching Results")
         results_layout = QVBoxLayout(results_group)
         
@@ -145,18 +144,93 @@ class TransactionMatcherWindow(QMainWindow):
         self.summary_label = QLabel("No results yet. Select transaction file and click 'Process Files' to begin.")
         results_layout.addWidget(self.summary_label)
         
+        # Add small spacing after summary
+        results_layout.addSpacing(8)
+        
+        # NEW: Editing toolbar positioned at top left, just below summary
+        editing_toolbar = self._create_editing_toolbar()
+        results_layout.addWidget(editing_toolbar)
+        
+        # Add small spacing after toolbar
+        results_layout.addSpacing(8)
+        
         # Results table (using editable table)
         self.results_table = self.editable_table.table
         self.editable_table.setup_results_table()
         results_layout.addWidget(self.results_table)
         
-        # Add editing toolbar
-        self.editable_table.add_toolbar_buttons(results_layout)
-        
-        # Export buttons row
+        # Export buttons row at bottom (unchanged position)
         results_layout.addLayout(self._create_export_buttons())
         
         return results_group
+    
+    def _create_editing_toolbar(self):
+        """Create the editing toolbar with left-aligned buttons and text separators"""
+        # Create simple widget container (no frame styling)
+        toolbar_widget = QWidget()
+        
+        # Create horizontal layout for toolbar buttons
+        toolbar_layout = QHBoxLayout(toolbar_widget)
+        toolbar_layout.setContentsMargins(0, 0, 0, 0)  # No margins for clean look
+        toolbar_layout.setSpacing(8)  # Normal spacing between buttons
+        
+        # Undo/Redo buttons
+        self.undo_btn = QPushButton("Undo")
+        self.undo_btn.clicked.connect(self.undo_changes)
+        self.undo_btn.setToolTip("Undo last change (Ctrl+Z)")
+        toolbar_layout.addWidget(self.undo_btn)
+        
+        self.redo_btn = QPushButton("Redo")
+        self.redo_btn.clicked.connect(self.redo_changes)
+        self.redo_btn.setToolTip("Redo last undone change (Ctrl+Y)")
+        toolbar_layout.addWidget(self.redo_btn)
+        
+        # Separator (simple text like before)
+        separator1 = QLabel("|")
+        separator1.setStyleSheet("color: gray;")
+        toolbar_layout.addWidget(separator1)
+        
+        # Reset button
+        self.reset_btn = QPushButton("Reset All")
+        self.reset_btn.clicked.connect(self.reset_to_original)
+        self.reset_btn.setToolTip("Reset all changes back to original processed data")
+        toolbar_layout.addWidget(self.reset_btn)
+        
+        # Separator (simple text like before)
+        separator2 = QLabel("|")
+        separator2.setStyleSheet("color: gray;")
+        toolbar_layout.addWidget(separator2)
+        
+        # Date Filter button
+        self.filter_date_btn = QPushButton("Filter by Date")
+        self.filter_date_btn.clicked.connect(self.filter_by_date)
+        self.filter_date_btn.setToolTip("Filter transactions by date range")
+        toolbar_layout.addWidget(self.filter_date_btn)
+        
+        # Separator (simple text like before)
+        separator3 = QLabel("|")
+        separator3.setStyleSheet("color: gray;")
+        toolbar_layout.addWidget(separator3)
+        
+        # Session buttons
+        self.save_session_btn = QPushButton("Save Session")
+        self.save_session_btn.clicked.connect(self.save_session)
+        self.save_session_btn.setToolTip("Save current table data as a session")
+        toolbar_layout.addWidget(self.save_session_btn)
+        
+        self.load_session_btn = QPushButton("Load Previous Session")
+        self.load_session_btn.clicked.connect(self.load_session)
+        self.load_session_btn.setToolTip("Load a previously saved session")
+        toolbar_layout.addWidget(self.load_session_btn)
+        
+        # Add stretch to push everything to the left
+        toolbar_layout.addStretch()
+        
+        # Update button states initially
+        self.update_editing_button_states()
+        
+        return toolbar_widget
+
     
     def _create_export_buttons(self):
         """Create the export buttons layout including Load to Fee Record"""
@@ -373,7 +447,8 @@ class TransactionMatcherWindow(QMainWindow):
         self.export_csv_btn.setEnabled(True)
         self.save_report_btn.setEnabled(True)
         
-        # Enable Load to Fee Record button only if fee record file is configured
+        # Update all button states
+        self.update_editing_button_states()
         self.update_fee_record_button_state()
         
         self.status_bar.showMessage("Processing completed successfully")
@@ -406,13 +481,77 @@ class TransactionMatcherWindow(QMainWindow):
         self.results_data = []
         self.summary_label.setText("No results yet. Select transaction file and click 'Process Files' to begin.")
         
-        # Disable export buttons
+        # Disable all buttons
         self.export_excel_btn.setEnabled(False)
         self.export_csv_btn.setEnabled(False)
         self.save_report_btn.setEnabled(False)
         self.load_fee_record_btn.setEnabled(False)
+        self.update_editing_button_states()
         
         self.status_bar.showMessage("Results cleared")
+    
+    # Editing operations (connected to new toolbar buttons)
+    def undo_changes(self):
+        """Undo last change"""
+        if self.editable_table.data_manager.undo():
+            self.editable_table.refresh_table_from_data_manager()
+            self.update_editing_button_states()
+            self.status_bar.showMessage("Change undone")
+    
+    def redo_changes(self):
+        """Redo last undone change"""
+        if self.editable_table.data_manager.redo():
+            self.editable_table.refresh_table_from_data_manager()
+            self.update_editing_button_states()
+            self.status_bar.showMessage("Change redone")
+    
+    def reset_to_original(self):
+        """Reset table to original data"""
+        reply = QMessageBox.question(self, "Confirm Reset", 
+                                   "This will discard all changes. Are you sure?",
+                                   QMessageBox.Yes | QMessageBox.No,
+                                   QMessageBox.No)
+        
+        if reply == QMessageBox.Yes:
+            self.editable_table.data_manager.reset_to_original()
+            self.editable_table.refresh_table_from_data_manager()
+            self.editable_table.has_changes = False
+            self.update_editing_button_states()
+            self.status_bar.showMessage("Data reset to original")
+    
+    def filter_by_date(self):
+        """Open date filter dialog and apply filter"""
+        self.editable_table.filter_by_date()
+        self.update_editing_button_states()
+    
+    def save_session(self):
+        """Save current table data to CSV file"""
+        self.editable_table.save_session()
+    
+    def load_session(self):
+        """Load a previous session from saved CSV files"""
+        self.editable_table.load_session()
+        self.update_editing_button_states()
+        self.update_fee_record_button_state()
+    
+    def update_editing_button_states(self):
+        """Update editing toolbar button enabled states"""
+        if hasattr(self, 'undo_btn'):
+            # Undo/Redo based on data manager state
+            self.undo_btn.setEnabled(len(self.editable_table.data_manager.undo_stack) > 0)
+            self.redo_btn.setEnabled(len(self.editable_table.data_manager.redo_stack) > 0)
+            
+            # Reset if there are changes
+            has_data_changes = self.editable_table.data_manager.has_unsaved_changes()
+            has_table_changes = self.editable_table.table.has_unsaved_changes()
+            self.reset_btn.setEnabled(has_data_changes or has_table_changes or self.editable_table.has_changes)
+            
+            # Filter button enabled when there's data
+            self.filter_date_btn.setEnabled(self.editable_table.table.rowCount() > 0)
+            
+            # Session buttons
+            self.save_session_btn.setEnabled(self.editable_table.table.rowCount() > 0)
+            self.load_session_btn.setEnabled(True)  # Always enabled
     
     def export_to_excel(self):
         """Export results to Excel"""
@@ -474,15 +613,6 @@ class TransactionMatcherWindow(QMainWindow):
             fee_record_path = self.get_fee_record_file_path_from_settings()
             fee_record_configured = bool(fee_record_path and os.path.exists(fee_record_path))
             
-            # DEBUG: Print status to help diagnose
-            print(f"DEBUG Fee Record Button State:")
-            print(f"  - Has processed data: {has_processed_data} (results count: {len(self.results_data)})")
-            print(f"  - Has table data: {has_table_data} (table rows: {self.editable_table.table.rowCount()})")
-            print(f"  - Has data (either): {has_data}")
-            print(f"  - Fee record path: '{fee_record_path}'")
-            print(f"  - Fee record file exists: {os.path.exists(fee_record_path) if fee_record_path else False}")
-            print(f"  - Fee record configured: {fee_record_configured}")
-            
             # Enable button only if both conditions are met
             button_enabled = has_data and fee_record_configured
             self.load_fee_record_btn.setEnabled(button_enabled)
@@ -499,9 +629,6 @@ class TransactionMatcherWindow(QMainWindow):
                 tooltip = "Load current table data to fee record file"
                 
             self.load_fee_record_btn.setToolTip(tooltip)
-            
-            print(f"  - Button enabled: {button_enabled}")
-            print(f"  - Tooltip: {tooltip}")
                 
         except Exception as e:
             print(f"Error updating fee record button state: {e}")
@@ -550,13 +677,15 @@ class TransactionMatcherWindow(QMainWindow):
         """Called when a session is successfully loaded"""
         # Update button states since we now have data in the table
         self.update_fee_record_button_state()
-        print("DEBUG: Session loaded, button state updated")
+        self.update_editing_button_states()
+        print("DEBUG: Session loaded, button states updated")
     
     def showEvent(self, event):
         """Handle window show event - update button states when window becomes visible"""
         super().showEvent(event)
         # Update button states when window is shown (helps with startup state)
         QTimer.singleShot(100, self.update_fee_record_button_state)
+        QTimer.singleShot(100, self.update_editing_button_states)
     
     def closeEvent(self, event):
         """Handle window close event"""

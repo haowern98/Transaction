@@ -1,12 +1,13 @@
 # File: src/gui/outstanding_payments_tab/outstanding_payments_tab.py
 """
-Outstanding Payments Tab - Updated with Student Names column
-Shows parents, their students, and outstanding months in a clean three-column format
+Outstanding Payments Tab - Updated with Month Filter and Zoom-Responsive Dropdown
+Shows parents, their students, and outstanding months with month selection filter
+FIXED: Dropdown menu now scales properly with zoom
 """
 
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, 
                             QTableWidget, QTableWidgetItem, QPushButton, QLabel, 
-                            QHeaderView, QMessageBox, QSizePolicy)
+                            QHeaderView, QMessageBox, QSizePolicy, QFrame, QCheckBox)
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
 from PyQt5.QtGui import QFont
 from typing import Dict, Any, List
@@ -96,7 +97,9 @@ class AnalysisThread(QThread):
             results = {
                 'outstanding_parents': outstanding_list,
                 'total_parents_with_outstanding': len(outstanding_list),
-                'total_months_checked': len(available_months)
+                'total_months_checked': len(available_months),
+                'available_months': available_months,
+                'parent_student_map': parent_student_map
             }
             
             self.finished.emit(results)
@@ -110,8 +113,8 @@ class AnalysisThread(QThread):
 
 class OutstandingPaymentsTab(QWidget):
     """
-    Outstanding Payments Tab with Student Names
-    Shows title, description, results table with Parent | Student | Outstanding Months
+    Outstanding Payments Tab with Month Filter
+    Shows title, description, month filter, and results table
     """
     
     def __init__(self, parent=None):
@@ -121,6 +124,12 @@ class OutstandingPaymentsTab(QWidget):
         self.payment_exporter = PaymentExporter(self)
         self.analysis_thread = None
         self.current_results = {}
+        self.all_results = {}  # Store complete unfiltered results
+        
+        # Month filter state
+        self.available_months = []
+        self.selected_months = set()  # Empty set means all selected
+        self.filter_popup = None
         
         # Get settings manager for fee record path
         try:
@@ -133,7 +142,7 @@ class OutstandingPaymentsTab(QWidget):
         self.auto_generate_if_ready()
         
     def setup_ui(self):
-        """Setup UI with title, three-column table with refresh button, and export button"""
+        """Setup UI with title, month filter, three-column table with refresh button, and export button"""
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(24, 24, 24, 24)  # Same as general settings
         main_layout.setSpacing(0)
@@ -163,36 +172,64 @@ class OutstandingPaymentsTab(QWidget):
         
         # Main title - SAME FONT as General Settings
         title_label = QLabel("Outstanding Payments")
-        title_label.setFont(QFont("Tahoma", 12, QFont.Bold))  # Same as General Settings
+        title_label.setFont(QFont("Arial", 12, QFont.Bold))  # Changed from Tahoma to Arial
         title_label.setStyleSheet("color: #1f1f1f;")
         header_layout.addWidget(title_label)
         
         # Subtitle - SAME FONT as General Settings
         subtitle_label = QLabel("View parents and students who have not made payments for specific months")
-        subtitle_label.setFont(QFont("Tahoma", 8, QFont.Normal))  # Same as General Settings
+        subtitle_label.setFont(QFont("Arial", 8, QFont.Normal))  # Changed from Tahoma to Arial
         subtitle_label.setStyleSheet("color: #1f1f1f;")
         header_layout.addWidget(subtitle_label)
         
         return header_widget
         
     def _create_results_section(self):
-        """Create main results table with refresh button"""
+        """Create main results table with month filter and refresh button"""
         results_group = QGroupBox("Outstanding Payments Results")
         results_layout = QVBoxLayout(results_group)
         
-        # Status row with refresh button
-        status_layout = QHBoxLayout()
-        self.status_label = QLabel("Checking for outstanding payments...")
-        status_layout.addWidget(self.status_label)
-        status_layout.addStretch()
+        # Filter row (top)
+        filter_layout = QHBoxLayout()
+        filter_layout.addWidget(QLabel("Show months:"))
         
-        # Refresh button - DEFAULT STYLING (matches existing project buttons)
+        # Create button that looks like combobox but opens custom popup
+        self.month_filter_btn = QPushButton("All Months")
+        self.month_filter_btn.clicked.connect(self.show_month_filter)
+        self.month_filter_btn.setMinimumWidth(120)
+        self.month_filter_btn.setStyleSheet("""
+            QPushButton {
+                text-align: left;
+                padding: 4px 8px;
+                border: 1px solid #cccccc;
+                background-color: white;
+            }
+            QPushButton:hover {
+                border-color: #0078d4;
+            }
+            QPushButton::menu-indicator {
+                image: none;
+                width: 0px;
+            }
+        """)
+        
+        # Add dropdown arrow manually
+        self.month_filter_btn.setText("All Months ▼")
+        
+        filter_layout.addWidget(self.month_filter_btn)
+        filter_layout.addStretch()
+        
+        # Refresh button
         self.refresh_btn = QPushButton("Refresh List")
         self.refresh_btn.clicked.connect(self.generate_outstanding_list)
         self.refresh_btn.setToolTip("Refresh the outstanding payments list")
-        status_layout.addWidget(self.refresh_btn)
+        filter_layout.addWidget(self.refresh_btn)
         
-        results_layout.addLayout(status_layout)
+        results_layout.addLayout(filter_layout)
+        
+        # Status row (below filter)
+        self.status_label = QLabel("Checking for outstanding payments...")
+        results_layout.addWidget(self.status_label)
         
         # Results table
         self.results_table = QTableWidget()
@@ -219,6 +256,227 @@ class OutstandingPaymentsTab(QWidget):
         export_layout.addStretch()
         
         return export_widget
+    
+    def show_month_filter(self):
+        """Show month filter popup with checkboxes"""
+        if not self.available_months:
+            return
+            
+        # Create popup if it doesn't exist
+        if self.filter_popup is None:
+            from PyQt5.QtWidgets import QFrame
+            self.filter_popup = QFrame(self)
+            self.filter_popup.setFrameStyle(QFrame.StyledPanel)
+            self.filter_popup.setWindowFlags(Qt.Popup)
+            self.filter_popup.setStyleSheet("""
+                QFrame { 
+                    background-color: white; 
+                    border: 1px solid #cccccc;
+                    border-radius: 2px;
+                }
+                QCheckBox {
+                    padding: 3px 8px;
+                    spacing: 6px;
+                }
+                QCheckBox:hover {
+                    background-color: #f0f8ff;
+                }
+                QCheckBox::indicator {
+                    width: 13px;
+                    height: 13px;
+                }
+                QCheckBox::indicator:unchecked {
+                    border: 1px solid #cccccc;
+                    background-color: white;
+                }
+                QCheckBox::indicator:checked {
+                    border: 1px solid #0078d4;
+                    background-color: #0078d4;
+                    image: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAiIGhlaWdodD0iMTAiIHZpZXdCb3g9IjAgMCAxMCAxMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTggMyBMNCw3IEwyLDUiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iMS41IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz4KPC9zdmc+);
+                }
+            """)
+            
+            popup_layout = QVBoxLayout(self.filter_popup)
+            popup_layout.setContentsMargins(0, 4, 0, 4)
+            popup_layout.setSpacing(0)
+            
+            # All Months checkbox
+            self.all_months_cb = QCheckBox("All Months")
+            self.all_months_cb.setFont(QFont("Arial", 0, QFont.Bold))
+            self.all_months_cb.stateChanged.connect(self.on_all_months_changed)
+            popup_layout.addWidget(self.all_months_cb)
+            
+            # Individual month checkboxes
+            self.month_checkboxes = {}
+            for month in ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+                         'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']:
+                cb = QCheckBox(month)
+                cb.stateChanged.connect(self.on_month_selection_changed)
+                self.month_checkboxes[month] = cb
+                popup_layout.addWidget(cb)
+            
+            # Set fixed width to match button
+            self.filter_popup.setFixedWidth(150)
+            
+            # ZOOM FIX: Register popup widgets with zoom system
+            try:
+                from gui.settings.zoom.zoom_system import get_zoom_system
+                zoom_system = get_zoom_system()
+                if zoom_system:
+                    zoom_system.register_widget(self.filter_popup)
+                    zoom_system.register_widget(self.all_months_cb)
+                    for cb in self.month_checkboxes.values():
+                        zoom_system.register_widget(cb)
+                    # FIX: Scale popup width with zoom
+                    current_zoom = zoom_system.get_current_zoom()
+                    scaled_width = int(150 * current_zoom / 100)
+                    self.filter_popup.setFixedWidth(scaled_width)
+            except:
+                pass
+        
+        # Update checkbox states and visibility
+        self.update_filter_checkboxes()
+        
+        # ZOOM-AWARE positioning
+        button_global_pos = self.month_filter_btn.mapToGlobal(self.month_filter_btn.rect().bottomLeft())
+        try:
+            from gui.settings.zoom.zoom_system import get_zoom_system
+            zoom_system = get_zoom_system()
+            zoom_factor = zoom_system.get_current_zoom() / 100 if zoom_system else 1.0
+            offset = int(2 * zoom_factor)
+        except:
+            offset = 2
+        self.filter_popup.move(button_global_pos.x(), button_global_pos.y() + offset)
+        self.filter_popup.show()
+    
+    def update_filter_checkboxes(self):
+        """Update checkbox states based on current selection"""
+        if not self.available_months:
+            return
+            
+        # Show only available months and update their states
+        for month, checkbox in self.month_checkboxes.items():
+            if month in self.available_months:
+                checkbox.setVisible(True)
+                checkbox.setChecked(len(self.selected_months) == 0 or month in self.selected_months)
+            else:
+                checkbox.setVisible(False)
+        
+        # Update "All Months" checkbox
+        available_month_set = set(self.available_months)
+        if len(self.selected_months) == 0 or self.selected_months == available_month_set:
+            self.all_months_cb.setChecked(True)
+        else:
+            self.all_months_cb.setChecked(False)
+    
+    def on_all_months_changed(self, state):
+        """Handle All Months checkbox change"""
+        if state == Qt.Checked:
+            self.selected_months = set()  # Empty means all selected
+        else:
+            self.selected_months = set()  # Will be filled by individual checkboxes
+        
+        # Update individual checkboxes
+        for month, checkbox in self.month_checkboxes.items():
+            if month in self.available_months:
+                checkbox.blockSignals(True)
+                checkbox.setChecked(state == Qt.Checked)
+                checkbox.blockSignals(False)
+        
+        self.update_filter_display()
+        self.apply_month_filter()
+    
+    def on_month_selection_changed(self):
+        """Handle individual month checkbox changes"""
+        # Collect selected months
+        newly_selected = set()
+        for month, checkbox in self.month_checkboxes.items():
+            if month in self.available_months and checkbox.isChecked():
+                newly_selected.add(month)
+        
+        self.selected_months = newly_selected
+        
+        # Update "All Months" checkbox
+        available_month_set = set(self.available_months)
+        self.all_months_cb.blockSignals(True)
+        if len(self.selected_months) == 0 or self.selected_months == available_month_set:
+            self.all_months_cb.setChecked(True)
+            self.selected_months = set()  # Empty means all selected
+        else:
+            self.all_months_cb.setChecked(False)
+        self.all_months_cb.blockSignals(False)
+        
+        self.update_filter_display()
+        self.apply_month_filter()
+    
+    def update_filter_display(self):
+        """Update the filter button text based on selection"""
+        if len(self.selected_months) == 0:  # All selected
+            self.month_filter_btn.setText("All Months ▼")
+        elif len(self.selected_months) <= 3:
+            months_text = ", ".join(sorted(self.selected_months))
+            self.month_filter_btn.setText(f"{months_text} ▼")
+        else:
+            first_three = sorted(list(self.selected_months))[:3]
+            remaining = len(self.selected_months) - 3
+            months_text = f"{', '.join(first_three)}, +{remaining} more"
+            self.month_filter_btn.setText(f"{months_text} ▼")
+    
+    def apply_month_filter(self):
+        """Apply month filter to current results"""
+        if not self.all_results:
+            return
+            
+        # Determine which months to include
+        months_to_include = set(self.available_months) if len(self.selected_months) == 0 else self.selected_months
+        
+        # Filter results
+        filtered_outstanding = []
+        for parent_data in self.all_results.get('outstanding_parents', []):
+            parent_outstanding_months = set(parent_data['outstanding_months'])
+            
+            # Check if this parent has outstanding payments in selected months
+            overlapping_months = parent_outstanding_months.intersection(months_to_include)
+            
+            if overlapping_months:
+                # Create filtered version showing only selected months
+                filtered_data = parent_data.copy()
+                filtered_data['outstanding_months'] = sorted(list(overlapping_months))
+                filtered_data['outstanding_months_str'] = ', '.join(sorted(overlapping_months))
+                filtered_outstanding.append(filtered_data)
+        
+        # Update current results
+        self.current_results = {
+            'outstanding_parents': filtered_outstanding,
+            'total_parents_with_outstanding': len(filtered_outstanding),
+            'total_months_checked': len(months_to_include)
+        }
+        
+        # Update display
+        self.populate_results_table(self.current_results)
+        self.update_status_after_filter()
+    
+    def update_status_after_filter(self):
+        """Update status label after applying filter"""
+        total_parents = self.current_results.get('total_parents_with_outstanding', 0)
+        selected_months_count = len(self.selected_months) if len(self.selected_months) > 0 else len(self.available_months)
+        
+        if total_parents > 0:
+            if len(self.selected_months) == 0:
+                self.status_label.setText(
+                    f"Found {total_parents} parents with outstanding payments across {selected_months_count} months"
+                )
+            else:
+                self.status_label.setText(
+                    f"Found {total_parents} parents with outstanding payments across {selected_months_count} selected months"
+                )
+            self.export_csv_btn.setEnabled(True)
+        else:
+            if len(self.selected_months) == 0:
+                self.status_label.setText(f"All parents have paid for all {selected_months_count} months - no outstanding payments!")
+            else:
+                self.status_label.setText(f"All parents have paid for selected months - no outstanding payments!")
+            self.export_csv_btn.setEnabled(False)
         
     def setup_results_table(self):
         """Setup the three-column results table: Parent | Student | Outstanding Months"""
@@ -289,26 +547,27 @@ class OutstandingPaymentsTab(QWidget):
     
     def analysis_finished(self, results: Dict[str, Any]):
         """Handle completed analysis"""
-        self.current_results = results
+        self.all_results = results  # Store complete results
+        
+        # Setup available months and default selection
+        self.available_months = [results.get('parent_student_map', {}).get(month, month) 
+                               for month in results.get('available_months', [])]
+        # Convert full month names to short names for display
+        month_name_map = {
+            'JANUARY': 'Jan', 'FEBRUARY': 'Feb', 'MARCH': 'Mar', 'APRIL': 'Apr',
+            'MAY': 'May', 'JUNE': 'Jun', 'JULY': 'Jul', 'AUGUST': 'Aug', 
+            'SEPTEMBER': 'Sep', 'OCTOBER': 'Oct', 'NOVEMBER': 'Nov', 'DECEMBER': 'Dec'
+        }
+        self.available_months = [month_name_map.get(month, month) for month in results.get('available_months', [])]
+        
+        self.selected_months = set()  # Default to all selected
         
         # Re-enable refresh button
         self.refresh_btn.setEnabled(True)
         
-        # Populate results table
-        self.populate_results_table(results)
-        
-        # Update status
-        total_parents = results.get('total_parents_with_outstanding', 0)
-        total_months = results.get('total_months_checked', 0)
-        
-        if total_parents > 0:
-            self.status_label.setText(
-                f"Found {total_parents} parents with outstanding payments across {total_months} months"
-            )
-            self.export_csv_btn.setEnabled(True)
-        else:
-            self.status_label.setText(f"All parents have paid for all {total_months} months - no outstanding payments!")
-            self.export_csv_btn.setEnabled(False)
+        # Apply initial filter (shows all)
+        self.update_filter_display()
+        self.apply_month_filter()
     
     def analysis_error(self, error_message: str):
         """Handle analysis errors"""
